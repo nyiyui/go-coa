@@ -1,0 +1,13 @@
+# ccc21s1
+
+(@io_in '\n')
+(@def heights (@mapnokey (@split (@io_in '\n') ' ') @int))
+(@def widths (@mapnokey (@split (@io_in '\n') ' ') @int))
+(@def area 0)
+(@map widths {
+    (@def i $0)
+    (@def width $1)
+    (@mod area (@concat area (@mul width (@concat (@select heights i) (@select heights (@concat i 1))))))
+})
+(@mod area (@div area 2))
+(@io_outln (@string area))

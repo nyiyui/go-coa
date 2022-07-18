@@ -1,0 +1,116 @@
+# constants
+@true # boolean true
+@false # boolean false
+
+# time
+(@time_now) # get current time
+(@time_sleep time) # return after waiting time seconds
+
+# outside system
+@sys_os # name of os (e.g. windows, linux)
+@sys_arch # name of CPU architecture (e.g. x86, amd64)
+@sys_args # list of arguments
+(@sys_exit exit_code) # exit with exit_code
+@sys_env # map of environment variables
+
+# testing
+(@assert assertion name) # assert that assertion is @true. (if not, raises an error)
+
+# filtering
+(@filter list filter) # filter list using filter
+(@glob pattern) # make a glob filter with pattern
+(@regex pattern) # make a regex filter with pattern
+
+# evaluation control
+(@error content) # raise an error with content
+(@continue) # skip the current loop
+(@break) # stop the loop
+(@return returned) # exit current block with return value returned
+
+# scope
+(@use name) # mark an unused variable name as used
+(@def name content) # define a variable name with content
+(@mod name content) # modify the innerest scope variable with name name to content
+
+# loops
+(@for init cond iter callable) # run init once and then callable and iter until cond is @false
+(@while cond callable) # run callable until cond is @false
+
+# control
+(@if [cond value]... [else]) # if cond is @true, evaluate and return the value next to it.
+                             # If all conds are @false, evaluate and return else.
+
+# mapping
+(@map list callable) # run callable with each key/index and value of list
+(@mapnokey list callable) # run callable with each value of list
+
+# lists
+(@split list splitter) # split list with splitter
+(@has_prefix list prefix) # return @true if list has prefix prefix
+(@trim_prefix list prefix) # remove prefix prefix if list has prefix prefix
+(@has_suffix list suffix) # return @true if list has suffix suffix
+(@trim_suffix list suffix) # remove suffix suffix if list has suffix suffix
+(@len list) # return length of list
+
+# folding
+(@foldl callable list) # fold (left) list using callable
+(@foldr callable list) # fold (right) list using callable
+
+# comparisons
+(@lt a b) # a < b
+(@le a b) # a ≤ b
+(@gt a b) # a > b
+(@ge a b) # a ≥ b
+(@eq a b) # returns whether contents of (@inspect a) and (@inspect b) are equal
+(@or a b) # a ∨ b
+(@and a b) # a ∧ b
+(@not a) # ¬ a
+
+# arithmetic
+(@concat a b) # a + b
+(@add a b) # a + b
+(@sub a b) # a - b
+(@mul a b) # a × b
+(@div a b) # a ÷ b
+(@rem a b) # a mod b
+
+(@http_get url) # return body of HTTP GET request sent with URL url
+
+(@file_write path content) # write content to file path
+(@file_read path) # return content of file path
+(@file_remove path) # remove file path
+(@file_list path) # return list of files in directory path
+
+(@io_out content) # print content to stdout
+(@io_outln content) # print content and ASCII code 10 (decimal) to stdout
+(@io_in delim) # return content read until delim from stdin (returned doesn't contain delim)
+
+(@complex real imag) # make a new complex number
+
+# FUTURE: add types for int, uint, float, string, etc and add a single (@parse type input) function
+(@complex_to input) # convert input to a complex number
+(@int input) # convert input to an integer
+(@uint input) # convert input to an unsigned integer
+(@float input) # convert input to a floating-point number
+(@string input) # convert input to a string
+(@inspect input) # convert input to a string representation
+
+(@json_to input) # convert input to JSON format
+(@json_from input) # convert input to native Coa data
+
+(@get_try map key fallback) # try to get value of key key from map map. If it doesn't exist, return fallback
+               # FUTURE: @get_try supports iterators and maps
+(@get map key) # return value of key key from map map
+               # FUTURE: @get supports iterators and maps
+(@set map key value) # set key key to value value in map map
+(@keys map) # get unordered keys of map
+            # FUTURE: @get supports iterators
+
+(@select list index) # return index-th value of list
+                     # FUTURE: replace with @get
+(@take_from list index) # return list from index
+(@take_to list index) # return list to index
+(@take list start end) # return list from start to end
+
+# utils
+(@label label content) # returns content; use to label nodes

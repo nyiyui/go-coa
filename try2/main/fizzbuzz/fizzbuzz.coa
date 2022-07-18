@@ -1,0 +1,8 @@
+# FizzBuzz
+(@io_outln (@foldr @concat (@for (@def i 0) (@lt i 101) (@mod i (@concat i 1)) {
+    (@def line (@concat
+        (@if (@eq (@rem i 3) 0) "Fizz" "")
+        (@if (@eq (@rem i 5) 0) "Buzz" "")
+    ))
+    (@concat (@if (@eq line "") (@string i) line) "\n")
+})))

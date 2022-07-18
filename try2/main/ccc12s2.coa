@@ -1,0 +1,21 @@
+# ccc12s2
+#(@def inp (@io_in '\n'))
+(@def inp "2I3I2X9V1X")
+(@def roman_numerals [m 'I' 1 'V' 5 'X' 10 'L' 50 'C' 100 'D' 500 'M' 1000])
+(@def prev_r 0)
+(@def prev_a 0)
+(@def total 0)
+
+(@for (@def i 0) (@lt i (@len inp)) (@mod i (@concat i 2)) {
+    (@def now_a (@int (@select inp i)))
+    (@def now_r (@get roman_numerals (@select inp (@concat i 1))))
+    (@def value (@mul now_a now_r))
+    (@if (@gt now_r prev_r) ({
+        (@mod total (@sub total (@foldr @mul [2 prev_a prev_r])))
+    }))
+    (@mod prev_a now_a)
+    (@mod prev_r now_r)
+    (@mod total (@concat total value))
+})
+
+(@io_outln (@string total))

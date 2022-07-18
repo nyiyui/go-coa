@@ -1,0 +1,15 @@
+# ccc21j3
+
+(@def d "")
+(@while @true {
+    (@def line (@io_in '\n'))
+    (@if (@eq line "99999") (@break))
+    (@def dr (@concat (@int (@select line 0)) (@int (@select line 1))))
+    (@def steps (@int (@take_from line 2)))
+    (@mod d (@if
+        (@not (@eq (@rem dr 2) 0)) "left"
+        (@and (@not (@eq dr 0)) (@eq (@rem dr 2) 0)) "right"
+        d
+    ))
+    (@io_outln "$d $steps")
+})

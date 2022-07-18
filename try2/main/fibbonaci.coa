@@ -1,0 +1,10 @@
+# Fibonacci Test
+(@def fib {
+    (@def x $0)
+    (@if
+        (@eq x 0) 0
+        (@eq x 1) 1
+        (@concat (fib (@sub x 1)) (fib (@sub x 2)))
+    )
+})
+(@io_outln (@inspect (fib 4)))

@@ -1,0 +1,33 @@
+(@def search {
+		(@def name $0)
+		(@def base_url $1)
+		(@def url "https://$base_url/w/api.php?action=query&list=search&srsearch=$name&format=json")
+		(@def data (@get (@get (@json_from (@http_get url)) "query") "search"))
+		(@map data {
+				(@def key $0)
+				(@def value $1)
+				(@get value "pageid")
+		})
+})
+
+(@def save {
+		(@def pageid $0)
+		(@def base_url $1)
+		(@def url "https://$base_url/w/api.php?action=parse&pageid=$pageid&format=json")
+		(@get (@get (@json_from (@http_get url)) "parse") "text")
+})
+
+(@def search_and_save {
+		(@def name $0)
+		(@def base_url $1)
+		(@map (search name base_url) {
+	      (@def pageid $0)
+				(@def src (save pageid base_url))
+				(@file_write "page_$pageid.html" src)
+		})
+})
+
+({
+		(search_and_save "concurrency" "en.wikipedia.org")
+		(search_and_save "good" "en.wiktionary.org")
+})

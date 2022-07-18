@@ -1,0 +1,10 @@
+@import("os")
+@import("bufio")
+
+reader: bufio.NewReader(os.Stdin)
+for func(){
+    line, _, err = reader.ReadLine()
+    match(err, [nil: __], func(){
+        panic(err)
+    })
+}

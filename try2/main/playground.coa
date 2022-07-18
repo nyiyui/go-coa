@@ -1,0 +1,60 @@
+(@io_outln (@inspect (@get @sys_env "GOPATH")))
+(@io_outln (@inspect (@set @sys_env "alphabet" "ABC")))
+(@io_outln (@inspect (@get @sys_env "alphabet")))
+(@io_outln (@concat "Envvars starting with \"GO\":\n" (@foldr @concat (@map @sys_env {(@if (@has_prefix $0 "GO") "\t$$0=$$1\n")}))))
+
+(@io_outln (@inspect (@filter (@file_list "try2/main") (@glob "*.coa"))))
+(@io_outln (@inspect (@filter (@file_list ".") (@regex ".*\\.(png|jpg)"))))
+(@def count (@len (@filter ["a.coa" "b.coa" "c.txt" "d.go" "e.md"] (@glob "*.coa"))))
+(@io_outln "coa files in examples: $count")
+
+(@io_outln (@inspect (@time_now)))
+
+(@io_outln (@inspect @sys_args))
+#(@file_write "uuid_from_api.txt" (@http_get "https://www.uuidgenerator.net/api/version4"))
+#(@http_get "https://google.ca")
+#(@io_out "one")
+#(@io_out "two")
+#(@io_out "three")
+#(@io_out "waiting for input")
+#(@io_out (@io_in '\n'))
+(@def download {
+    (@def name $0)
+    (@def url $1)
+    (@io_outln "downloading $name from $url")
+    (@file_write name (@http_get url))
+})
+
+(@def search {%
+    (@def name $0)
+    (@def base_url $1)
+    (@def url "https://$base_url/w/api.php?action=query&list=search&srsearch=$name&format=json")
+    (@def data (@get (@get (@json_from (@http_get url)) "query") "search"))
+    (@map data {
+        (@def key $0)
+        (@def value $1)
+        [(@get value "title") (@get value "pageid")]
+    })
+})
+
+(@def search_and_print {
+    (@def term $0)
+    (@def url $1)
+    (@io_outln "# Search Results for $term ($url)")
+    (@map (search term url) {
+        (@def num (@concat $0 1))
+        (@def title (@select $1 0))
+        (@def pageid (@select $1 1))
+        (@io_outln "$num. [$title](https://$url/?curid=$pageid)")
+    })
+})
+
+# (@io_outln (@inspect (@for (@def i 0) (@lt i 10) (@mod i (@concat i 1)) {})))
+
+(search_and_print "concurrency" "en.wikipedia.org")
+(search_and_print "concurrency" "ja.wikipedia.org")
+
+({%
+    (download "kaikoura.jpg" "https://upload.wikimedia.org/wikipedia/commons/6/6b/View_from_Mt_Fyffe%2C_Kaikoura_Ranges%2C_New_Zealand.jpg")
+    (download "tsubakuro.jpg" "https://upload.wikimedia.org/wikipedia/commons/9/9c/Lagopus_muta_japonica_Mount_Tsubakuro.jpg")
+})

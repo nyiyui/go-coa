@@ -1,0 +1,14 @@
+# ccc21j2
+
+(@def n (@int (@io_in '\n')))
+(@def max_bid 0)
+(@def max_name "")
+(@for (@def i 0) (@lt i n) (@mod i (@concat i 1)) {
+    (@def name (@io_in '\n'))
+    (@def bid (@int (@io_in '\n')))
+    (@if (@gt bid max_bid) ({
+        (@mod max_bid bid)
+        (@mod max_name name)
+    }))
+})
+(@io_outln max_name)

@@ -1,0 +1,10 @@
+(@io_outln (@trim_prefix "abc" "a"))
+(@io_outln (@trim_suffix "abc" "c"))
+
+#(@include "flag.coa" flags)
+#(@io_outln (@inspect (flags ["-key" "value"])))
+
+#(@bifrost_profile)
+#(@bifrost_peek a (@def set use) (@io_outln "abc"))
+#(@io_outln "exiting with code 1")
+#(@sys_exit 1)

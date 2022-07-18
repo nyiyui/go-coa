@@ -1,0 +1,11 @@
+(@map (@split (@file_read (@select @sys_args 1)) "\n") {
+    (@def i $0)
+    (@def line $1)
+    (@if (@label "not a comment line" (@ne (@select line 0) '#')) ({
+        (@def split (@split line " "))
+        (@def to (@select split 0))
+        (@def url (@select split 1))
+        (@file_write to (@http_get url))
+        (@io_outln "downloaded $url to $to")
+    }))
+})

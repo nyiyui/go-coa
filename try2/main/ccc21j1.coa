@@ -1,0 +1,5 @@
+# ccc21j1
+
+(@def b (@int (@io_in '\n')))
+(@io_outln (@string (@sub (@mul 5 b) 400)))
+(@io_outln (@if (@gt b 100) "-1" (@lt b 100) "1" "0"))

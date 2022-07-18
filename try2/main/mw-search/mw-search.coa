@@ -1,0 +1,28 @@
+# MediaWiki Search
+(@def search {
+    (@def name $0)
+    (@def base_url $1)
+    (@def url "https://$base_url/w/api.php?action=query&list=search&srsearch=$name&format=json")
+    (@def data (@get (@get (@json_from (@http_get url)) "query") "search"))
+    (@map data {
+        (@def key $0)
+        (@def value $1)
+        [(@get value "title") (@get value "pageid")]
+    })
+})
+
+(@def search_and_save {
+    (@def term $0)
+    (@def base_url $1)
+    (@file_write "search_results_$term.md" (@concat "# Search Results for $term ($base_url)\n\n" (@foldr @concat (@map (search term base_url) {
+        (@def num (@concat $0 1))
+        (@def title (@select $1 0))
+        (@def pageid (@select $1 1))
+        "$num. [$title](https://$base_url/?curid=$pageid)\n"
+    }))))
+})
+
+({% # percent means "allow running this concurrently"
+    (search_and_save "concurrency" "en.wikipedia.org")
+    (search_and_save "good" "en.wiktionary.org")
+})
