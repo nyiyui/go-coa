@@ -11,9 +11,10 @@ import (
 	"gitlab.com/coalang/go-coa/try2/util"
 )
 
-func compileEvalers(env *Env, evalers []Evaler) ([]*strand, error) {
-	// TODO: get keys pre-runtime
-	deps := getEvalersDeps(env.keys(), evalers)
+type Strand = strand
+
+func CompileEvalers(keys []string, evalers []Evaler) ([]*strand, error) {
+	deps := getEvalersDeps(keys, evalers)
 	strands := reverseDepsStrands(cleanStrands(getStrands(evalers, deps)))
 	var err error
 	strands, err = checkStrands(evalers, strands)
@@ -24,7 +25,8 @@ func compileEvalers(env *Env, evalers []Evaler) ([]*strand, error) {
 }
 
 func evalParallel2(env *Env, evalers []Evaler) ([]Evaler, error) {
-	strands, err := compileEvalers(env, evalers)
+	log.Println("evalParallel2", env, env.keys())
+	strands, err := CompileEvalers(env.keys(), evalers)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +36,7 @@ func evalParallel2(env *Env, evalers []Evaler) ([]Evaler, error) {
 			env.printf("sc %d", len(evalers))
 		}
 		s := strands[0]
-		for _, i := range s.todo {
+		for _, i := range s.Todo {
 			evalers[i], err = Eval(evalers[i], env)
 			if err != nil {
 				return nil, err
@@ -138,20 +140,29 @@ type (
 )
 
 type strand struct {
-	deps        []strandIndex
-	reverseDeps []strandIndex
-	todo        []evalerIndex
+	Deps        []strandIndex
+	ReverseDeps []strandIndex
+	Todo        []evalerIndex
 
 	// TODO: optimize based on runtime performance
 	minTime time.Duration
 	maxTime time.Duration
 }
 
-func newStrand(todo ...evalerIndex) *strand { return &strand{todo: todo} }
+func (s *strand) updateTime(t time.Duration) {
+	if s.minTime == 0 || s.minTime > t {
+		s.minTime = t
+	}
+	if s.maxTime < t {
+		s.maxTime = t
+	}
+}
 
-func (s *strand) appendDeps(deps ...strandIndex) { s.deps = append(s.deps, deps...) }
+func newStrand(todo ...evalerIndex) *strand { return &strand{Todo: todo} }
 
-func (s *strand) appendTodo(todo ...evalerIndex) { s.todo = append(s.todo, todo...) }
+func (s *strand) appendDeps(deps ...strandIndex) { s.Deps = append(s.Deps, deps...) }
+
+func (s *strand) appendTodo(todo ...evalerIndex) { s.Todo = append(s.Todo, todo...) }
 
 const (
 	outerScopeEvalerIndex = -1
@@ -160,7 +171,9 @@ const (
 func getEvalersDeps(keys []string, evalers []Evaler) evalersDeps {
 	sDeps := evalersDeps{}
 	varIndexes := map[string]int{}
+	log.Println("keys", keys)
 	for _, set := range util.NoBuiltins(keys) {
+		log.Println("set", set)
 		varIndexes[set] = outerScopeEvalerIndex
 	}
 	for i, evaler := range evalers {
@@ -202,10 +215,10 @@ func reverseDepsStrands(ss []*strand) []*strand {
 	// NOTE: deps always point before
 	for i := len(ss) - 1; i >= 0; i-- {
 		s := ss[i]
-		for _, dep := range s.deps {
+		for _, dep := range s.Deps {
 			depss[dep] = append(depss[dep], i)
 		}
-		s.reverseDeps = depss[i]
+		s.ReverseDeps = depss[i]
 	}
 	return ss
 }
@@ -213,7 +226,7 @@ func reverseDepsStrands(ss []*strand) []*strand {
 func checkStrands(evalers []Evaler, ss []*strand) ([]*strand, error) {
 	evalersRan := make([]bool, len(evalers))
 	for _, s := range ss {
-		for _, i := range s.todo {
+		for _, i := range s.Todo {
 			evalersRan[i] = true
 		}
 	}
@@ -260,9 +273,9 @@ func getStrands(evalers []Evaler, depss evalersDeps) []*strand {
 				}
 				/*
 						depStrand := strands[j]
-						if len(depStrand.deps) == len(deps)-1 {
+						if len(depStrand.Deps) == len(deps)-1 {
 							theirDeps := map[strandIndex]struct{}{}
-							for dep2 := range depStrand.deps {
+							for dep2 := range depStrand.Deps {
 								theirDeps[dep2] = struct{}{}
 							}
 							theirDeps[j] = struct{}{}
@@ -294,7 +307,7 @@ func getStrands(evalers []Evaler, depss evalersDeps) []*strand {
 					//newRel = append(newRel, j)
 					//newRel = append(newRel, strands[j]...)
 					newRel.appendTodo(j)
-					newRel.appendTodo(strands[j].todo...)
+					newRel.appendTodo(strands[j].Todo...)
 					strandsM[dep] = newRelIndex // others might use strandsM[dep]
 					strands[j] = nil            // empty strand (don't remove it, that would make things complicated)
 				}
@@ -310,15 +323,15 @@ func printStrand(env *Env, evalers []Evaler, i int, s *strand) {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "strand %d:\n", i)
 	fmt.Fprintf(b, "\ttodo:\n")
-	for _, j := range s.todo {
+	for _, j := range s.Todo {
 		fmt.Fprintf(b, "\t\t%d %s\n", j, inspect(evalers[j]))
 	}
 	fmt.Fprintf(b, "\treverseDeps:\n")
-	for _, j := range s.reverseDeps {
+	for _, j := range s.ReverseDeps {
 		fmt.Fprintf(b, "\t\t%d\n", j)
 	}
 	fmt.Fprintf(b, "\tdeps:\n")
-	for _, j := range s.deps {
+	for _, j := range s.Deps {
 		fmt.Fprintf(b, "\t\t%d\n", j)
 	}
 	env.printf("%s\n", b.String())
@@ -353,17 +366,19 @@ func newRunEnv(env *Env, evalers []Evaler, ss []*strand) *runEnv {
 		ch:                  make(chan result, n),
 	}
 	for i, s := range ss {
-		re.strandsDepCount[i] = len(s.deps)
+		re.strandsDepCount[i] = len(s.Deps)
 		re.strandsDepCountLock[i] = sync.Mutex{}
 		re.strandsStartCh[i] = make(chan struct{})
 	}
 	return re
 }
 
+func (re *runEnv) strands() []*strand { return re.ss }
+
 func startStrands(ss []*strand) (starts []strandIndex) {
 	starts = make([]strandIndex, 0)
 	for i, s := range ss {
-		if len(s.deps) == 0 {
+		if len(s.Deps) == 0 {
 			starts = append(starts, i)
 		}
 	}
@@ -414,11 +429,15 @@ func (r *runEnv) signalDepDone2(env *Env, strandI strandIndex) bool {
 func (r *runEnv) runStartStrand(strandI strandIndex) {
 	prefix := fmt.Sprintf("[strand %d] ", strandI)
 	s := r.ss[strandI]
-	for _, i := range s.todo {
+	start := time.Now()
+	for _, i := range s.Todo {
 		r.runEvaler(i)
 	}
-	lastRDI := len(s.reverseDeps) - 1
-	for i, reverseDep := range s.reverseDeps {
+	took := time.Since(start)
+	r.ss[strandI].updateTime(took)
+
+	lastRDI := len(s.ReverseDeps) - 1
+	for i, reverseDep := range s.ReverseDeps {
 		lastRD := i == lastRDI
 		rdLastDepDone := r.signalDepDone2(r.env, reverseDep)
 		if rdLastDepDone {
@@ -444,11 +463,11 @@ func (r *runEnv) runStrand(env *Env, evalers []Evaler, ch chan<- result, strandI
 	<-r.strandsStartCh[strandI]
 	env.printf("runStrand start %d", strandI)
 	s := r.ss[strandI]
-	for _, i := range s.todo {
+	for _, i := range s.Todo {
 		r.runEvaler(i)
 	}
 	env.printf("runStrand sendSignals %d", strandI)
-	for _, reverseDep := range s.reverseDeps {
+	for _, reverseDep := range s.ReverseDeps {
 		r.signalDepDone(env, reverseDep)
 	}
 }

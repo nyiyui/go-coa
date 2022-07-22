@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func (e *Env) LoadPath(path string) (re Evaler, err error) {
+func (e *Env) LoadPathOnly(path string) (re *Nodes, err error) {
 	var data []byte
 	resp, err := (&http.Client{Timeout: 1 * time.Second}).Get(path)
 	if err != nil {
@@ -44,5 +44,9 @@ LocalFS:
 	if err != nil {
 		return nil, err
 	}
+	return &root, nil
+}
+func (e *Env) LoadPath(path string) (re Evaler, err error) {
+	root, err := e.LoadPathOnly(path)
 	return root.Eval(e, 0)
 }

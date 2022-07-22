@@ -3,9 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/alecthomas/participle/v2/lexer"
-	"gitlab.com/coalang/go-coa/try2/parser"
+	"log"
 	"os"
+
+	"github.com/alecthomas/participle/v2/lexer"
+	"gitlab.com/coalang/go-coa/try2/compile"
+	"gitlab.com/coalang/go-coa/try2/parser"
 )
 
 func main_() error {
@@ -26,7 +29,7 @@ func main_() error {
 	env := parser.NewEnv(lexer.Position{
 		Filename: "root",
 	}, allowParallel)
-	_, err = env.LoadPath(filepath)
+	root, err := env.LoadPathOnly(filepath)
 	if err != nil {
 		val, err := parser.ReturnVals(err)
 		if err != nil {
@@ -37,6 +40,13 @@ func main_() error {
 			os.Exit(code)
 		}
 	}
+	ce := compile.NewEnv(lexer.Position{Filename: "root"})
+	s := ce.NewScope()
+	insts, err := s.CompileNodes(*root)
+	if err != nil {
+		return err
+	}
+	log.Printf("instructions:\n%s", compile.Instructions(insts))
 	return nil
 }
 
