@@ -27,13 +27,19 @@ type Env struct {
 	debug          bool
 }
 
-func (e *Env) printf(format string, v ...interface{}) {
+func (e *Env) AllowParallel2() bool { return e.allowParallel }
+func (e *Env) Debug2() bool         { return e.debug }
+func (e *Env) Pos2() lexer.Position { return e.Pos }
+
+func (e *Env) Printf(format string, v ...interface{}) {
 	_ = log.Output(3, strings.Repeat("\t", e.StackLen())+fmt.Sprintf(format, v...))
 }
 
 var _ common.Env = (*Env)(nil)
 
 type hook func() (keep bool)
+
+type Hook = hook
 
 func NewEnv(pos lexer.Position, allowParallel bool) *Env {
 	return &Env{
@@ -79,7 +85,7 @@ func (e EnvDump) String() string {
 	return fmt.Sprintf("Dump (%s%s)%s", e.Pos, lone, vars)
 }
 
-func (e *Env) dump() *EnvDump {
+func (e *Env) Dump() *EnvDump {
 	vars := map[string]string{}
 	for key, value := range e.vars {
 		vars[key] = value.Inspect()
@@ -101,7 +107,7 @@ func (e *Env) checkResource(r util.Resource) bool {
 	return e.ResourcesGuard.Allowed(r) && e.outer.checkResource(r)
 }
 
-func (e *Env) checkResources(rs []util.Resource) bool {
+func (e *Env) CheckResources(rs []util.Resource) bool {
 	if e == nil {
 		return true
 	}
@@ -113,10 +119,10 @@ func (e *Env) checkResources(rs []util.Resource) bool {
 			return false
 		}
 	}
-	return e.outer.checkResources(rs)
+	return e.outer.CheckResources(rs)
 }
 
-func (e *Env) badResources(rs []util.Resource) []int {
+func (e *Env) BadResources(rs []util.Resource) []int {
 	re := make([]int, 0)
 	for i, r := range rs {
 		if !e.checkResource(r) {
@@ -137,7 +143,7 @@ func (e *Env) ensureResourceLock(r util.ResourceDef, arg string) {
 	}
 }
 
-func (e *Env) lockResources(pos lexer.Position, rs []util.ResourceDef, args []string) {
+func (e *Env) LockResources(pos lexer.Position, rs []util.ResourceDef, args []string) {
 	for i, r := range rs {
 		e.lockResource(pos, r, args[i])
 	}
@@ -148,7 +154,7 @@ func (e *Env) lockResource(_ lexer.Position, r util.ResourceDef, arg string) {
 	e.getMutex(r.Name, arg).Lock()
 }
 
-func (e *Env) unlockResources(pos lexer.Position, rs []util.ResourceDef, args []string) {
+func (e *Env) UnlockResources(pos lexer.Position, rs []util.ResourceDef, args []string) {
 	for i, r := range rs {
 		e.unlockResource(pos, r, args[i])
 	}
@@ -164,7 +170,7 @@ func (e *Env) getMutex(name, arg string) *sync.Mutex {
 	return e.resources[name][arg]
 }
 
-func (e *Env) inheritLone(pos lexer.Position) *Env {
+func (e *Env) InheritLone(pos lexer.Position) IEnv {
 	e.varsLock.RLock()
 	defer e.varsLock.RUnlock()
 	return &Env{
@@ -178,7 +184,7 @@ func (e *Env) inheritLone(pos lexer.Position) *Env {
 	}
 }
 
-func (e *Env) inherit(pos lexer.Position) *Env {
+func (e *Env) Inherit(pos lexer.Position) IEnv {
 	e.varsLock.RLock()
 	defer e.varsLock.RUnlock()
 	return &Env{
@@ -191,7 +197,7 @@ func (e *Env) inherit(pos lexer.Position) *Env {
 	}
 }
 
-func (e *Env) get(key string) (Evaler, bool) {
+func (e *Env) Get(key string) (Evaler, bool) {
 	if e == nil {
 		return nil, false
 	}
@@ -211,11 +217,11 @@ func (e *Env) _get(key string) (Evaler, bool) {
 	if e.lone && !util.IsBuiltin(key) {
 		return nil, false
 	}
-	return e.outer.get(key)
+	return e.outer.Get(key)
 }
 
-func (e *Env) has(key string) bool {
-	_, ok := e.get(key)
+func (e *Env) Has(key string) bool {
+	_, ok := e.Get(key)
 	return ok
 }
 
@@ -224,7 +230,7 @@ func (e *Env) _has(key string) bool {
 	return ok
 }
 
-func (e *Env) hasKeys(keys []string) bool {
+func (e *Env) HasKeys(keys []string) bool {
 	e.varsLock.RLock()
 	defer e.varsLock.RUnlock()
 	for _, key := range keys {
@@ -235,14 +241,14 @@ func (e *Env) hasKeys(keys []string) bool {
 	return true
 }
 
-func (e *Env) keys() []string {
+func (e *Env) Keys() []string {
 	if e == nil {
 		return nil
 	}
-	return append(e.myKeys(), e.outer.keys()...)
+	return append(e.MyKeys(), e.outer.Keys()...)
 }
 
-func (e *Env) myKeys() []string {
+func (e *Env) MyKeys() []string {
 	e.varsLock.Lock()
 	defer e.varsLock.Unlock()
 	re := make([]string, 0, len(e.vars))
@@ -252,18 +258,18 @@ func (e *Env) myKeys() []string {
 	return re
 }
 
-func (e *Env) def(key string, evaler Evaler) {
+func (e *Env) Def(key string, evaler Evaler) {
 	e.varsLock.Lock()
 	defer e.varsLock.Unlock()
 	e.vars[key] = evaler
 	e.callHooksConcurrent()
 }
 
-func (e *Env) mod(key string, evaler Evaler) {
-	if e.outer.has(key) {
-		e.outer.mod(key, evaler)
+func (e *Env) Mod(key string, evaler Evaler) {
+	if e.outer.Has(key) {
+		e.outer.Mod(key, evaler)
 	}
-	e.def(key, evaler)
+	e.Def(key, evaler)
 }
 
 func (e *Env) callHooksConcurrent() {
@@ -285,7 +291,7 @@ func (e *Env) callHooks() {
 	e.hookNames = nextNames
 }
 
-func (e *Env) addHook(name string, f hook) {
+func (e *Env) AddHook(name string, f hook) {
 	e.hooksLock.Lock()
 	defer e.hooksLock.Unlock()
 	e.hooks = append(e.hooks, f)

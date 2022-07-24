@@ -1,9 +1,15 @@
 package compile
 
 import (
+	"errors"
+	"fmt"
+	"strconv"
+
 	"github.com/alecthomas/participle/v2/lexer"
 	"gitlab.com/coalang/go-coa/try2/parser"
 )
+
+const compileBundle = false
 
 type CompileEnv struct {
 	Pos       lexer.Position
@@ -38,8 +44,12 @@ func (s *Scope) inherit(pos lexer.Position) *Scope {
 }
 
 func (s *Scope) wrap(insts []Instruction, name string) []Instruction {
-	insts = append([]Instruction{op3(OpWrap, s.levelsFromRoot, name)}, insts...)
-	insts = append(insts, op(OpUnwrap, s.levelsFromRoot))
+	insts = append([]Instruction{
+		op3(OpWrap, s.levelsFromRoot, name),
+	}, insts...)
+	insts = append(insts,
+		op3(OpUnwrap, s.levelsFromRoot, name),
+	)
 	return insts
 }
 
@@ -61,7 +71,7 @@ func (s *Scope) CompileNodes(n parser.Nodes) ([]Instruction, error) {
 }
 
 func (s *Scope) compileNodes(n parser.Nodes) (compiledNode, error) {
-	nodes := make([]compiledNode, 0, len(n.Content))
+	nodes := make([]compiledNode, 1, len(n.Content))
 	for _, n := range n.Content {
 		node, err := s.compileNode(n)
 		if err != nil {
@@ -69,6 +79,7 @@ func (s *Scope) compileNodes(n parser.Nodes) (compiledNode, error) {
 		}
 		nodes = append(nodes, node)
 	}
+	nodes[0] = &instsNode{raw: []Instruction{op(OpVarDeclare, len(s.keys))}}
 	return &compiledNodes{Nodes: nodes}, nil
 }
 
@@ -79,13 +90,9 @@ func (s *Scope) compileNode(n parser.Node) (compiledNode, error) {
 	case n.ID != nil:
 		return s.compileID(n.ID)
 	case n.String_ != nil:
-		panic("string")
-		//c.constants = append(c.constants, n)
-		//return &constantNode{Index: len(c.constants) - 1}, nil
+		return &litStringNode{String: n.String_.Content}, nil
 	case n.Rune != nil:
-		panic("rune")
-		//c.constants = append(c.constants, n)
-		//return &constantNode{Index: len(c.constants) - 1}, nil
+		return &litRuneNode{Rune: rune(*n.Rune)}, nil
 	case n.Call != nil:
 		return s.compileCall(n.Call)
 	case n.Block != nil:
@@ -103,15 +110,34 @@ func (s *Scope) compileID(n *parser.ID) (compiledNode, error) {
 		return &booleanNode{Value: true}, nil
 	case "@false":
 		return &booleanNode{Value: false}, nil
-	case "@include":
-		return &wellKnownNode{Number: wellKnownInclude}, nil
+	//case "@include":
+	//	return &wellKnownNode{Number: wellKnownInclude}, nil
 	default:
 		name := n.Content
+		if name[0] == '@' {
+			return &dynVarNode{Name: name}, nil
+		}
+		if name[0] == '$' {
+			n2, err := strconv.Atoi(name[1:])
+			if err != nil {
+				return nil, NewError(n.Pos, fmt.Errorf("argument variable must be a number: %w", err))
+			}
+			return &instsNode{raw: []Instruction{
+				op(OpArgLoad, n2),
+			}}, nil
+		}
 		//if name[0] == '@' {
 		//	panic(fmt.Sprintf("builtin %s invalid or not implemented", name))
 		//}
 		//panic("variables not implemented")
-		return &dynVarNode{Name: name}, nil
+		sym, level, ok := s.getSymbol(name)
+		if !ok {
+			return nil, NewError(n.Pos, errors.New("undefined symbol "+name))
+		}
+		return &instsNode{raw: s.wrap([]Instruction{
+			op3(OpVarLoad, sym, level),
+		}, "load "+name)}, nil
+		// return &dynVarNode{Name: name}, nil
 	}
 }
 
@@ -120,27 +146,67 @@ func (c *CompileEnv) registerConstant(n parser.Node) int {
 	return len(c.constants) - 1
 }
 
+// Symbol represents a compiled key (ident).
+type Symbol = int
+
+func (s *Scope) getSymbol(key string) (sym Symbol, level int, ok bool) {
+	level = 0
+	for s != nil {
+		for i, k := range s.keys {
+			if k == key {
+				return Symbol(i), level, true
+			}
+		}
+		s = s.parent
+		level++
+	}
+	return 0, 0, false
+}
+
 func (s *Scope) compileCall(n *parser.Call) (*instsNode, error) {
 	{
 		a := n.Content.Content[0]
 		if a.ID == nil {
 			goto Normal
 		}
-		if (*a.ID).Content != "@def" {
+		define := a.ID.Content == "@def"
+		redefine := a.ID.Content == "@mod"
+		if !define && !redefine {
 			goto Normal
 		}
 		b := n.Content.Content[1]
 		if b.ID == nil {
-			goto Normal
+			return nil, NewError(n.Pos, errors.New("def expects a name"))
 		}
 		name := (*b.ID).Content
 		s.keys = append(s.keys, name)
+		sym, level, ok := s.getSymbol(name)
+		if !ok {
+			panic("symbol not found although it should have been added right before")
+		}
+		if level != 0 {
+			panic("symbol not at level 0 although it should have been defined right before at the level 0")
+		}
+		value := n.Content.Content[2]
+		compiledValue, err := s.compileNode(value)
+		if err != nil {
+			return nil, NewError(n.Pos, err)
+		}
+		insts := []Instruction{op3(OpPos, 0, n.Pos.String())}
+		insts = append(insts, compiledValue.insts()...)
+		if define {
+			insts = append(insts, op3(OpVarAssign, sym, name))
+		} else if redefine {
+			insts = append(insts, op3(OpVarReassign, sym, name))
+		}
+		return &instsNode{raw: insts}, nil
 	}
 Normal:
 	insts := make([]Instruction, 1, len(n.Content.Content)+1)
 	insts[0] = op3(OpPos, 0, n.Pos.String())
-	for i := len(n.Content.Content) - 1; i >= 0; i-- {
-		node := n.Content.Content[i]
+	for _, node := range n.Content.Content {
+		//for i := len(n.Content.Content) - 1; i >= 0; i-- {
+		//	node := n.Content.Content[i]
 		compiled, err := s.compileNode(node)
 		if err != nil {
 			return nil, NewError(node.Pos, err)
@@ -152,7 +218,6 @@ Normal:
 }
 
 func (s *Scope) compileBlock(n *parser.Block) (compiledNode, error) {
-	// TODO: get keys pre-runtime
 	ns := s.inherit(n.Pos)
 	evalers := make([]parser.Evaler, len(n.Content.Content))
 	nodes := make([]compiledNode, len(n.Content.Content))
@@ -168,12 +233,23 @@ func (s *Scope) compileBlock(n *parser.Block) (compiledNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	inner := s.compileBundle(n.Pos, ss, nodes)
-	insts := []Instruction{
-		op(OpBlockStart, len(inner)),
+	insts := make([]Instruction, 3)
+	if compileBundle {
+		insts = append(insts, s.compileBundle(n.Pos, ss, nodes)...)
+	} else {
+		for _, node := range nodes {
+			insts = append(insts, node.insts()...)
+		}
 	}
-	insts = append(insts, inner...)
 	insts = append(insts, op1(OpBlockEnd))
+	insts[0] = op3(OpPos, 0, n.Pos.String())
+	insts[1] = op(OpBlockStart, len(insts)-1)
+	keysLen := len(ns.keys)
+	if keysLen > 0 {
+		insts[2] = op(OpVarDeclare, len(ns.keys))
+	} else {
+		insts[2] = op1(OpNop)
+	}
 	return &instsNode{raw: s.wrap(insts, "block")}, nil
 }
 
@@ -208,7 +284,7 @@ type bundleNode struct {
 func (s *Scope) compileBundle(pos lexer.Position, ss []*parser.Strand, nodes []compiledNode) []Instruction {
 	insts := make([]Instruction, 3)
 	insts[0] = op3(OpWrap, s.levelsFromRoot, "bundle")
-	insts[1] = op3(OpPos, 0, pos)
+	insts[1] = op3(OpPos, 0, pos.String())
 	insts[2] = op(OpBundleStart, -1) // placeholder
 	for _, ss := range ss {
 		insts2 := make([]Instruction, 1)
@@ -244,7 +320,6 @@ func (s *Scope) compileBundle(pos lexer.Position, ss []*parser.Strand, nodes []c
 	}
 	insts[2] = op(OpBundleStart, len(insts)-1)
 	insts = append(insts, op1(OpBundleEnd))
-	insts = append(insts, op(OpUnwrap, s.levelsFromRoot))
 	return s.wrap(insts, "bundle")
 }
 
@@ -281,16 +356,6 @@ func (c *compiledNodes) insts() []Instruction {
 	return insts
 }
 
-type constantNode struct {
-	Index int
-}
-
-func (c *constantNode) insts() []Instruction {
-	return []Instruction{
-		op(OpConst, c.Index),
-	}
-}
-
 type booleanNode struct {
 	Value bool
 }
@@ -317,6 +382,7 @@ func (i *instsNode) insts() []Instruction {
 	return i.raw
 }
 
+/*
 type wellKnownNumber int
 
 type wellKnownNode struct {
@@ -328,6 +394,7 @@ func (w *wellKnownNode) insts() []Instruction { return []Instruction{op(OpWellKn
 const (
 	wellKnownInclude wellKnownNumber = iota
 )
+*/
 
 type litNumberNode struct {
 	Number float64
@@ -335,7 +402,27 @@ type litNumberNode struct {
 
 func (l *litNumberNode) insts() []Instruction {
 	return []Instruction{
-		op(OpLitNumber, int(l.Number)),
+		op3(OpLitNumber, 0, l.Number),
+	}
+}
+
+type litStringNode struct {
+	String string
+}
+
+func (l *litStringNode) insts() []Instruction {
+	return []Instruction{
+		op3(OpLitString, 0, l.String),
+	}
+}
+
+type litRuneNode struct {
+	Rune rune
+}
+
+func (l *litRuneNode) insts() []Instruction {
+	return []Instruction{
+		op3(OpLitRune, 0, l.Rune),
 	}
 }
 

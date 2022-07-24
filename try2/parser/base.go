@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/alecthomas/participle/v2/lexer"
-	"github.com/gobwas/glob"
-	"gitlab.com/coalang/go-coa/try2/util"
 	"io"
 	"io/fs"
 	"net/http"
@@ -19,6 +16,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/alecthomas/participle/v2/lexer"
+	"github.com/gobwas/glob"
+	"gitlab.com/coalang/go-coa/try2/util"
 )
 
 var ErrInternal = errors.New("internal error")
@@ -42,6 +43,8 @@ func (e *ErrReturn) Is(target error) bool {
 
 var OsArgs = os.Args
 
+func NewBase() map[string]Evaler { return newBase() }
+
 func newBase() map[string]Evaler {
 	return map[string]Evaler{
 		"@true":  &Bool{Content: true},
@@ -51,15 +54,15 @@ func newBase() map[string]Evaler {
 			return c.Content.Content[1].Select().IDUses()
 		}, func(c *Call) []string {
 			return (&Nodes{Content: c.Content.Content[2:]}).IDUses()
-		}, NewNative(util.InfoPure, func(env *Env, args []Evaler) (re Evaler, err error) {
+		}, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (re Evaler, err error) {
 			path := args[0].(BecomesString).BecomeString()
 			defer func() {
 				if err != nil {
 					err = fmt.Errorf("including %s: %w", path, err)
 				}
 			}()
-			inner := env.inheritLone(GetPos(args[0]))
-			_, err = inner.LoadPath(filepath.Dir(env.Pos.Filename) + "/" + path)
+			inner := env.InheritLone(GetPos(args[0]))
+			_, err = inner.LoadPath(filepath.Dir(env.Pos2().Filename) + "/" + path)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
 					libPath, ok := os.LookupEnv("COA_LIB")
@@ -75,20 +78,20 @@ func newBase() map[string]Evaler {
 				}
 			}
 			var value Evaler
-			for _, key := range inner.myKeys() {
+			for _, key := range inner.MyKeys() {
 				if util.IsBuiltin(key) {
 					continue
 				}
-				value, _ = inner.get(key)
-				env.def(key, value)
+				value, _ = inner.Get(key)
+				env.Def(key, value)
 			}
 			return nil, nil
 		}, OptionArgsPrefix(TypeBecomesString))),
 
-		"@time_now": NewNative(util.Info{Resources: []util.ResourceDef{{"os.time", -1}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@time_now": NewNative(util.Info{Resources: []util.ResourceDef{{"os.time", -1}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			return &Time{Time: time.Now()}, nil
 		}, OptionArgs()),
-		"@time_sleep": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@time_sleep": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			time.Sleep(time.Duration(float64(*(args[0].(*Number))) * float64(time.Second)))
 			return nil, nil
 		}, OptionArgs(TypeNumber)),
@@ -96,7 +99,7 @@ func newBase() map[string]Evaler {
 		"@sys_os":   NewString(runtime.GOOS),
 		"@sys_arch": NewString(runtime.GOARCH),
 		"@sys_args": NewList(OsArgs),
-		"@sys_exit": NewNative(util.Info{Resources: []util.ResourceDef{{"os.exit", -1}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@sys_exit": NewNative(util.Info{Resources: []util.ResourceDef{{"os.exit", -1}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			code := int(args[0].(*Number).BecomeFloat64())
 			os.Exit(code)
 			// panic there to replace return statement
@@ -105,7 +108,7 @@ func newBase() map[string]Evaler {
 		}, OptionArgs(TypeNumber)),
 		"@sys_env": new(SysEnv),
 
-		"@assert": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@assert": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			ok, err := BoolFromEvaler(args[0])
 			if err != nil {
 				return nil, err
@@ -116,7 +119,7 @@ func newBase() map[string]Evaler {
 			return args[0], nil
 		}, OptionArgs(TypeAny, TypeBecomesString)),
 
-		"@filter": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@filter": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			nodes := args[0].(HasNodes).Nodes()
 			filterer := args[1].(Callable)
 			var evaler Evaler
@@ -145,7 +148,7 @@ func newBase() map[string]Evaler {
 			}
 			return &List{Content: Nodes{Content: re}}, nil
 		}, OptionArgs(TypeHasNodes, TypeCallable)),
-		"@glob": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@glob": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			pattern := args[0].(BecomesString).BecomeString()
 			compiled, err := glob.Compile(pattern)
 			if err != nil {
@@ -153,7 +156,7 @@ func newBase() map[string]Evaler {
 			}
 			return &Globber{pattern: compiled, src: pattern}, nil
 		}, OptionArgs(TypeBecomesString)),
-		"@regex": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@regex": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			pattern := args[0].(BecomesString).BecomeString()
 			compiled, err := regexp.Compile(pattern)
 			if err != nil {
@@ -162,40 +165,40 @@ func newBase() map[string]Evaler {
 			return &Regexer{pattern: compiled, src: pattern}, nil
 		}, OptionArgs(TypeBecomesString)),
 
-		"@error": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@error": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return nil, fmt.Errorf("error: %s", args[0].(*String).Content)
 		}, OptionArgs(TypeString)),
-		"@continue": nativeSpecial("@continue", idProviderNone, idProviderNone, NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@continue": nativeSpecial("@continue", idProviderNone, idProviderNone, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return nil, ErrContinue
 		}, OptionNone)),
-		"@break": nativeSpecial("@break", idProviderNone, idProviderNone, NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@break": nativeSpecial("@break", idProviderNone, idProviderNone, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return nil, ErrBreak
 		}, OptionNone)),
-		"@return": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@return": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return nil, &ErrReturn{Value: args[0]}
 		}, OptionArgs(TypeAny)),
-		"@return_len": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@return_len": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return nil, &ErrReturn{
 				Len:   int(args[1].(BecomesFloat64).BecomeFloat64()),
 				Value: args[0],
 			}
 		}, OptionArgs(TypeAny, TypeBecomesFloat64)),
 
-		"@label": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@label": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return args[1], nil
 		}, OptionArgs(TypeString, TypeAny)),
 
-		"@use": NewNative(util.InfoPure, func(_ *Env, _ []Evaler) (Evaler, error) { return NewBool(false), nil }),
+		"@use": NewNative(util.InfoPure, func(_ IEnv, _ []Evaler) (Evaler, error) { return NewBool(false), nil }),
 		"@def": nativeSpecial("@def", func(c *Call) []string {
 			return c.Content.Content[2].Select().IDUses()
 		}, func(c *Call) []string {
 			return []string{c.Content.Content[1].Select().(*ID).Content}
-		}, NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		}, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			if len(args) != 2 {
 				return nil, errors.New("@mod: must have 2 args")
 			}
 			var err error
-			args[1], err = Eval(args[1], env.inherit(lexer.Position{Filename: "@def"}))
+			args[1], err = Eval(args[1], env.Inherit(lexer.Position{Filename: "@def"}))
 			if err != nil {
 				return nil, err
 			}
@@ -206,24 +209,24 @@ func newBase() map[string]Evaler {
 			if util.IsArgument(name) {
 				return nil, errors.New("cannot @def or @mod argument names")
 			}
-			env.def(name, args[1])
+			env.Def(name, args[1])
 			return args[1], nil
 		}, OptionArgs(TypeID, TypeAny))),
 		"@mod": nativeSpecial("@mod", func(c *Call) []string {
 			return c.Content.Content[2].Select().IDUses()
 		}, func(c *Call) []string {
 			return []string{c.Content.Content[1].Select().(*ID).Content}
-		}, NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		}, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			if len(args) != 2 {
 				return nil, errors.New("@mod: must have 2 args")
 			}
 			var err error
-			args[1], err = Eval(args[1], env.inherit(lexer.Position{Filename: "@def"}))
+			args[1], err = Eval(args[1], env.Inherit(lexer.Position{Filename: "@def"}))
 			if err != nil {
 				return nil, err
 			}
 			name := args[0].(*ID).Content
-			if !env.has(name) {
+			if !env.Has(name) {
 				return nil, fmt.Errorf("cannot modify undefined variable %s", name)
 			}
 			if util.IsBuiltin(name) {
@@ -232,16 +235,16 @@ func newBase() map[string]Evaler {
 			if util.IsArgument(name) {
 				return nil, errors.New("cannot @def or @mod argument names")
 			}
-			env.mod(name, args[1])
+			env.Mod(name, args[1])
 			return args[1], nil
 		}, OptionArgs(TypeID, TypeAny))),
 
-		"@for": nativeSpecial("@for", nil, nil, NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@for": nativeSpecial("@for", nil, nil, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			init := args[0]
 			condition := args[1]
 			iter := args[2]
 			callable := args[3].(Callable)
-			inner := env.inherit(GetPos(callable))
+			inner := env.Inherit(GetPos(callable))
 			_, err := Eval(init, inner)
 			if err != nil {
 				return nil, err
@@ -290,10 +293,10 @@ func newBase() map[string]Evaler {
 			}
 			return &List{Content: Nodes{Content: results}}, nil
 		}, OptionArgs(TypeAny, TypeAny, TypeAny, TypeCallable))),
-		"@while": nativeSpecial("@while", nil, nil, NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@while": nativeSpecial("@while", nil, nil, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			condition := args[0]
 			callable := args[1].(Callable)
-			inner := env.inherit(GetPos(callable))
+			inner := env.Inherit(GetPos(callable))
 			results := make([]Node, 0)
 			var result Evaler
 			for {
@@ -325,7 +328,7 @@ func newBase() map[string]Evaler {
 
 		"@if": nativeSpecial("@if", nil, func(c *Call) []string {
 			return c.Content.Content[0].Select().IDSets()
-		}, NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		}, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			if len(args) == 0 {
 				return nil, errors.New("blank")
 			}
@@ -351,7 +354,7 @@ func newBase() map[string]Evaler {
 			return NewNumber(0), nil
 		}, OptionVariadic(TypeAny))),
 
-		"@mapnokey": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@mapnokey": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			list := args[0].(HasNodes)
 			callable := args[1].(Callable)
 			results := make([]Node, len(list.Nodes().Content))
@@ -366,7 +369,7 @@ func newBase() map[string]Evaler {
 			}
 			return &List{Content: Nodes{Content: results}}, nil
 		}, OptionArgs(TypeHasNodes, TypeCallable)),
-		"@map": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@map": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			list := args[0].(Iter)
 			callable := args[1].(Callable)
 			results := make([]Node, 0)
@@ -382,7 +385,7 @@ func newBase() map[string]Evaler {
 			}
 			return &List{Content: Nodes{Content: results}}, nil
 		}, OptionArgs(TypeIter, TypeCallable)),
-		"@range": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@range": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			switch len(args) {
 			case 1:
 				stop := int(args[0].(BecomesFloat64).BecomeFloat64())
@@ -401,7 +404,7 @@ func newBase() map[string]Evaler {
 			}
 		}, OptionVariadic(TypeBecomesFloat64)),
 
-		"@split": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@split": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			nodes := args[0].(HasNodes).Nodes()
 			against := args[1]
 			re := make([]Node, 0)
@@ -415,7 +418,7 @@ func newBase() map[string]Evaler {
 			re = append(re, Node{List: &List{Content: Nodes{Content: nodes.Content[prev:]}}})
 			return &List{Content: Nodes{Content: re}}, nil
 		}, OptionArgs(TypeHasNodes, TypeAny)),
-		"@trim_prefix": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@trim_prefix": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			against := args[0].(HasNodes).Nodes()
 			prefix := args[1].(HasNodes).Nodes()
 			if len(prefix.Content) > len(against.Content) {
@@ -432,7 +435,7 @@ func newBase() map[string]Evaler {
 				},
 			}, nil
 		}, OptionArgs(TypeHasNodes, TypeHasNodes)),
-		"@has_prefix": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@has_prefix": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			against := args[0].(HasNodes).Nodes()
 			prefix := args[1].(HasNodes).Nodes()
 			if len(prefix.Content) > len(against.Content) {
@@ -445,7 +448,7 @@ func newBase() map[string]Evaler {
 			}
 			return NewBool(true), nil
 		}, OptionArgs(TypeHasNodes, TypeHasNodes)),
-		"@trim_suffix": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@trim_suffix": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			against := args[0].(HasNodes).Nodes()
 			suffix := args[1].(HasNodes).Nodes()
 			if len(suffix.Content) > len(against.Content) {
@@ -462,7 +465,7 @@ func newBase() map[string]Evaler {
 				},
 			}, nil
 		}, OptionArgs(TypeHasNodes, TypeHasNodes)),
-		"@has_suffix": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@has_suffix": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			against := args[0].(HasNodes).Nodes()
 			suffix := args[1].(HasNodes).Nodes()
 			if len(suffix.Content) > len(against.Content) {
@@ -475,11 +478,11 @@ func newBase() map[string]Evaler {
 			}
 			return NewBool(true), nil
 		}, OptionArgs(TypeHasNodes, TypeHasNodes)),
-		"@len": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@len": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return NewNumber(float64(len(args[0].(HasNodes).Nodes().Content))), nil
 		}, OptionArgs(TypeHasNodes)),
 
-		"@foldl": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@foldl": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			callable := args[0].(Callable)
 			list := args[1].(HasNodes)
 			var result Evaler
@@ -496,7 +499,7 @@ func newBase() map[string]Evaler {
 			}
 			return result, nil
 		}, OptionArgs(TypeCallable, TypeHasNodes)),
-		"@foldr": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@foldr": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			callable := args[0].(Callable)
 			list := args[1].(HasNodes)
 			var result Evaler
@@ -542,13 +545,13 @@ func newBase() map[string]Evaler {
 			}
 			return cmp == +1 || cmp == 0, nil
 		}),
-		"@eq": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@eq": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return NewBool(args[0].Inspect() == args[1].Inspect()), nil
 		}, OptionArgs(TypeAny, TypeAny)),
-		"@ne": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@ne": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return NewBool(args[0].Inspect() != args[1].Inspect()), nil
 		}, OptionArgs(TypeAny, TypeAny)),
-		"@or": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@or": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a, err := BoolFromEvaler(args[0])
 			if err != nil {
 				return nil, err
@@ -559,7 +562,7 @@ func newBase() map[string]Evaler {
 			}
 			return NewBool(a || b), nil
 		}, OptionArgs(TypeBecomeBool, TypeBecomeBool)),
-		"@and": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@and": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a, err := BoolFromEvaler(args[0])
 			if err != nil {
 				return nil, err
@@ -570,7 +573,7 @@ func newBase() map[string]Evaler {
 			}
 			return NewBool(a && b), nil
 		}, OptionArgs(TypeBecomeBool, TypeBecomeBool)),
-		"@not": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@not": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			b, err := BoolFromEvaler(args[0])
 			if err != nil {
 				return nil, err
@@ -578,7 +581,7 @@ func newBase() map[string]Evaler {
 			return NewBool(b), nil
 		}, OptionArgs(TypeBecomeBool)),
 
-		"@concat": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@concat": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			switch arg0 := args[0].(type) {
 			case BecomesFloat64:
 				switch arg1 := args[1].(type) {
@@ -604,7 +607,7 @@ func newBase() map[string]Evaler {
 			panic(fmt.Sprintf("unexpected type %T and %T", args[0], args[1]))
 		}, OptionArgs(anyNilOf(TypeNumber, TypeBecomesString), anyNilOf(TypeNumber, TypeBecomesString))),
 
-		"@add": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@add": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a := args[0].(BecomesNumberLike).BecomeNumberLike().Clone()
 			b := args[1].(BecomesNumberLike).BecomeNumberLike()
 			ok := a.Add(b)
@@ -613,7 +616,7 @@ func newBase() map[string]Evaler {
 			}
 			return a, nil
 		}, OptionArgs(TypeBecomesNumberLike, TypeBecomesNumberLike)),
-		"@sub": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@sub": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a := args[0].(BecomesNumberLike).BecomeNumberLike().Clone()
 			b := args[1].(BecomesNumberLike).BecomeNumberLike()
 			ok := a.Sub(b)
@@ -622,7 +625,7 @@ func newBase() map[string]Evaler {
 			}
 			return a, nil
 		}, OptionArgs(TypeBecomesNumberLike, TypeBecomesNumberLike)),
-		"@mul": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@mul": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a := args[0].(BecomesNumberLike).BecomeNumberLike().Clone()
 			b := args[1].(BecomesNumberLike).BecomeNumberLike()
 			ok := a.Mul(b)
@@ -631,7 +634,7 @@ func newBase() map[string]Evaler {
 			}
 			return a, nil
 		}, OptionArgs(TypeBecomesNumberLike, TypeBecomesNumberLike)),
-		"@div": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@div": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a := args[0].(BecomesNumberLike).BecomeNumberLike().Clone()
 			b := args[1].(BecomesNumberLike).BecomeNumberLike()
 			ok := a.Div(b)
@@ -640,7 +643,7 @@ func newBase() map[string]Evaler {
 			}
 			return a, nil
 		}, OptionArgs(TypeBecomesNumberLike, TypeBecomesNumberLike)),
-		"@rem": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@rem": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a := args[0].(BecomesNumberLike).BecomeNumberLike().Clone()
 			b := args[1].(BecomesNumberLike).BecomeNumberLike()
 			ok := a.Mod(b)
@@ -649,7 +652,7 @@ func newBase() map[string]Evaler {
 			}
 			return a, nil
 		}, OptionArgs(TypeBecomesNumberLike, TypeBecomesNumberLike)),
-		"@pow": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@pow": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a := args[0].(BecomesNumberLike).BecomeNumberLike().Clone()
 			b := args[1].(BecomesNumberLike).BecomeNumberLike()
 			ok := a.Pow(b)
@@ -658,7 +661,7 @@ func newBase() map[string]Evaler {
 			}
 			return a, nil
 		}, OptionArgs(TypeBecomesNumberLike, TypeBecomesNumberLike)),
-		"@abs": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@abs": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a := args[0].(BecomesNumberLike).BecomeNumberLike().Clone()
 			ok := a.Abs()
 			if !ok {
@@ -671,7 +674,7 @@ func newBase() map[string]Evaler {
 			return a, nil
 		}, OptionArgs(TypeBecomesNumberLike)),
 
-		"@http_get": NewNative(util.Info{Resources: []util.ResourceDef{{"http", 0}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@http_get": NewNative(util.Info{Resources: []util.ResourceDef{{"http", 0}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			got, err := (&http.Client{Timeout: 10 * time.Second}).Get(args[0].(BecomesString).BecomeString())
 			if err != nil {
 				return nil, err
@@ -683,7 +686,7 @@ func newBase() map[string]Evaler {
 			return NewString(string(body)), nil
 		}, OptionArgs(TypeBecomesString)),
 
-		"@file_write": NewNative(util.Info{Resources: []util.ResourceDef{{"fs.local", 0}}}, func(env *Env, args []Evaler) (evaler Evaler, err error) {
+		"@file_write": NewNative(util.Info{Resources: []util.ResourceDef{{"fs.local", 0}}}, func(env IEnv, args []Evaler) (evaler Evaler, err error) {
 			file, err := os.Create(args[0].(BecomesString).BecomeString())
 			if err != nil {
 				return nil, err
@@ -700,21 +703,21 @@ func newBase() map[string]Evaler {
 			}
 			return NewNumber(float64(writeString)), nil
 		}, OptionArgs(TypeBecomesString, TypeBecomesString)),
-		"@file_read": NewNative(util.Info{Resources: []util.ResourceDef{{"fs.local", 0}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@file_read": NewNative(util.Info{Resources: []util.ResourceDef{{"fs.local", 0}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			file, err := os.ReadFile(args[0].(BecomesString).BecomeString())
 			if err != nil {
 				return nil, err
 			}
 			return NewString(string(file)), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@file_remove": NewNative(util.Info{Resources: []util.ResourceDef{{"fs.local", 0}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@file_remove": NewNative(util.Info{Resources: []util.ResourceDef{{"fs.local", 0}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			err := os.RemoveAll(args[0].(BecomesString).BecomeString())
 			if err != nil {
 				return nil, err
 			}
 			return nil, nil
 		}, OptionArgs(TypeBecomesString)),
-		"@file_list": NewNative(util.Info{Resources: []util.ResourceDef{{"fs.local", 0}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@file_list": NewNative(util.Info{Resources: []util.ResourceDef{{"fs.local", 0}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			p := args[0].(BecomesString).BecomeString()
 			dirs, err := os.ReadDir(p)
 			if err != nil {
@@ -727,21 +730,21 @@ func newBase() map[string]Evaler {
 			return re, nil
 		}, OptionArgs(TypeBecomesString)),
 
-		"@io_out": NewNative(util.Info{Resources: []util.ResourceDef{{"io.stdout", -1}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@io_out": NewNative(util.Info{Resources: []util.ResourceDef{{"io.stdout", -1}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			wrote, err := os.Stdout.WriteString(args[0].(BecomesString).BecomeString())
 			if err != nil {
 				return nil, err
 			}
 			return NewNumber(float64(wrote)), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@io_outln": NewNative(util.Info{Resources: []util.ResourceDef{{"io.stdout", -1}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@io_outln": NewNative(util.Info{Resources: []util.ResourceDef{{"io.stdout", -1}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			wrote, err := os.Stdout.WriteString(args[0].(BecomesString).BecomeString() + "\n")
 			if err != nil {
 				return nil, err
 			}
 			return NewNumber(float64(wrote)), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@io_in": NewNative(util.Info{[]util.ResourceDef{{"io.stdin", -1}}}, func(env *Env, args []Evaler) (Evaler, error) {
+		"@io_in": NewNative(util.Info{[]util.ResourceDef{{"io.stdin", -1}}}, func(env IEnv, args []Evaler) (Evaler, error) {
 			reader := bufio.NewReader(os.Stdin)
 			read, err := reader.ReadString(byte(*(args[0].(*Rune))))
 			if err != nil {
@@ -750,13 +753,13 @@ func newBase() map[string]Evaler {
 			return NewString(read[:len(read)-1]), nil
 		}, OptionArgs(TypeRune)),
 
-		"@complex": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@complex": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			a := args[0].(BecomesFloat64).BecomeFloat64()
 			b := args[1].(BecomesFloat64).BecomeFloat64()
 			c := Complex(complex(a, b))
 			return &c, nil
 		}, OptionArgs(TypeBecomesFloat64, TypeBecomesFloat64)),
-		"@complex_from": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@complex_from": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			c, err := strconv.ParseComplex(strings.TrimSpace(args[0].(BecomesString).BecomeString()), 64)
 			if err != nil {
 				return nil, err
@@ -766,48 +769,48 @@ func newBase() map[string]Evaler {
 				return &c, nil
 			}
 		}, OptionArgs(TypeBecomesString)),
-		"@int": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@int": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			float, err := strconv.ParseInt(strings.TrimSpace(args[0].(BecomesString).BecomeString()), 10, 64)
 			if err != nil {
 				return nil, err
 			}
 			return NewNumber(float64(float)), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@uint": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@uint": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			float, err := strconv.ParseInt(strings.TrimSpace(args[0].(BecomesString).BecomeString()), 10, 64)
 			if err != nil {
 				return nil, err
 			}
 			return NewNumber(float64(float)), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@float": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@float": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			float, err := strconv.ParseFloat(strings.TrimSpace(args[0].(BecomesString).BecomeString()), 64)
 			if err != nil {
 				return nil, err
 			}
 			return NewNumber(float), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@string": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@string": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			if args[0] == nil {
 				return NewString("<nil>"), nil
 			}
 			return NewString(args[0].String()), nil
 		}, OptionArgs(TypeAny)),
-		"@inspect": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@inspect": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			if args[0] == nil {
 				return NewString("<nil>"), nil
 			}
 			return NewString(args[0].Inspect()), nil
 		}, OptionArgs(TypeAny)),
 
-		"@json_to": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@json_to": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			marshalled, err := json.Marshal(args[0])
 			if err != nil {
 				return nil, fmt.Errorf("json: %s", err)
 			}
 			return NewString(string(marshalled)), nil
 		}, OptionArgs(TypeAny)),
-		"@json_from": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@json_from": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			var v interface{}
 			err := json.Unmarshal([]byte(args[0].(*String).Content), &v)
 			if err != nil {
@@ -816,28 +819,28 @@ func newBase() map[string]Evaler {
 			return toEvaler(v)
 		}, OptionArgs(TypeString)),
 
-		"@url_from_path": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@url_from_path": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			unescaped, err := url.PathUnescape(args[0].(BecomesString).BecomeString())
 			if err != nil {
 				return nil, err
 			}
 			return NewString(unescaped), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@url_from_query": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@url_from_query": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			unescaped, err := url.QueryUnescape(args[0].(BecomesString).BecomeString())
 			if err != nil {
 				return nil, err
 			}
 			return NewString(unescaped), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@url_to_path": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@url_to_path": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return NewString(url.PathEscape(args[0].(BecomesString).BecomeString())), nil
 		}, OptionArgs(TypeBecomesString)),
-		"@url_to_query": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@url_to_query": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			return NewString(url.QueryEscape(args[0].(BecomesString).BecomeString())), nil
 		}, OptionArgs(TypeBecomesString)),
 
-		"@get_try": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@get_try": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			m := args[0].(MapLike)
 			key := args[1].(*String).Content
 			fallback := args[2]
@@ -850,7 +853,7 @@ func newBase() map[string]Evaler {
 			}
 			return value, nil
 		}, OptionArgs(TypeMapLike, TypeString, TypeAny)),
-		"@get": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@get": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			m := args[0].(MapLike)
 			key := args[1].(BecomesString).BecomeString()
 			value, ok, err := m.Get(key)
@@ -862,7 +865,7 @@ func newBase() map[string]Evaler {
 			}
 			return value, nil
 		}, OptionArgs(TypeMapLike, TypeBecomesString)),
-		"@set": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@set": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			m := args[0].(MapLike)
 			key := args[1].(BecomesString).BecomeString()
 			value := args[2]
@@ -872,7 +875,7 @@ func newBase() map[string]Evaler {
 			}
 			return value, nil
 		}, OptionArgs(TypeMapLike, TypeBecomesString, TypeAny)),
-		"@keys": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@keys": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			m := args[0].(MapLike)
 			keys := m.Keys()
 			l := &List{Content: Nodes{Content: make([]Node, 0, len(keys))}}
@@ -882,7 +885,7 @@ func newBase() map[string]Evaler {
 			return l, nil
 		}, OptionArgs(TypeMapLike)),
 
-		"@select": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@select": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			list := args[0].(HasNodes)
 			index := int(*(args[1].(*Number)))
 			if l := len(list.Nodes().Content); index >= l {
@@ -892,7 +895,7 @@ func newBase() map[string]Evaler {
 			}
 			return list.Nodes().Content[index].Select(), nil
 		}, OptionArgs(TypeHasNodes, TypeNumber)),
-		"@take_from": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@take_from": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			list := args[0].(HasNodes)
 			start := int(*(args[1].(*Number)))
 			nodes := list.Nodes()
@@ -904,7 +907,7 @@ func newBase() map[string]Evaler {
 			}
 			return &List{Content: Nodes{Pos: GetPos(list), Content: nodes.Content[start:]}}, nil
 		}, OptionArgs(TypeHasNodes, TypeNumber)),
-		"@take_to": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@take_to": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			list := args[0].(HasNodes)
 			end := int(*(args[1].(*Number)))
 			nodes := list.Nodes()
@@ -916,7 +919,7 @@ func newBase() map[string]Evaler {
 			}
 			return &List{Content: Nodes{Pos: GetPos(list), Content: nodes.Content[:end]}}, nil
 		}, OptionArgs(TypeHasNodes, TypeNumber)),
-		"@take": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@take": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			list := args[0].(HasNodes)
 			start := int(*(args[1].(*Number)))
 			end := int(*(args[2].(*Number)))
@@ -939,11 +942,11 @@ func newBase() map[string]Evaler {
 			return &List{Content: Nodes{Pos: GetPos(list), Content: nodes.Content[start:end]}}, nil
 		}, OptionArgs(TypeHasNodes, TypeNumber, TypeNumber)),
 
-		"@bifrost_peek": nativeSpecial("@bifrost_peek", idProviderNone, idProviderNone, NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@bifrost_peek": nativeSpecial("@bifrost_peek", idProviderNone, idProviderNone, NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			Bifrost.Peek(env, args)
 			return nil, nil
 		}, OptionVariadic(TypeAny))),
-		"@bifrost_profile": NewNative(util.InfoPure, func(env *Env, args []Evaler) (Evaler, error) {
+		"@bifrost_profile": NewNative(util.InfoPure, func(env IEnv, args []Evaler) (Evaler, error) {
 			Bifrost.Profile(env)
 			return nil, nil
 		}, OptionArgs()),

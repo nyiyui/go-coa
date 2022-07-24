@@ -48,5 +48,5 @@ LocalFS:
 }
 func (e *Env) LoadPath(path string) (re Evaler, err error) {
 	root, err := e.LoadPathOnly(path)
-	return root.Eval(e, 0)
+	return root.Eval(e)
 }

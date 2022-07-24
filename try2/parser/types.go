@@ -38,7 +38,7 @@ func isRunParallel(i interface{}) bool {
 
 type Evaler interface {
 	HasInfo
-	Eval(env *Env, order int) (result Evaler, err error)
+	Eval(env IEnv) (result Evaler, err error)
 	fmt.Stringer
 	Inspect() string
 
@@ -46,7 +46,40 @@ type Evaler interface {
 	IDSets() []string
 }
 
-func Eval(e Evaler, env *Env) (result Evaler, err error) {
+type IEnv interface {
+	Def(key string, evaler Evaler)
+	Mod(key string, evaler Evaler)
+	Get(key string) (Evaler, bool)
+	Has(key string) bool
+	HasKeys(keys []string) bool
+
+	Dump() *EnvDump
+
+	AddHook(name string, f hook)
+
+	Keys() []string
+	MyKeys() []string
+
+	AllowParallel2() bool
+	Debug2() bool
+	Pos2() lexer.Position
+
+	Printf(format string, v ...interface{})
+
+	CheckResources(rs []util.Resource) bool
+	BadResources(rs []util.Resource) []int
+	LockResources(pos lexer.Position, rs []util.ResourceDef, args []string)
+	UnlockResources(pos lexer.Position, rs []util.ResourceDef, args []string)
+
+	Inherit(pos lexer.Position) IEnv
+	InheritLone(pos lexer.Position) IEnv
+
+	LoadPath(path string) (re Evaler, err error)
+}
+
+var _ IEnv = (*Env)(nil)
+
+func Eval(e Evaler, env IEnv) (result Evaler, err error) {
 	if e == nil {
 		return nil, nil
 	}
@@ -58,7 +91,7 @@ func Eval(e Evaler, env *Env) (result Evaler, err error) {
 	default:
 		costCacheSet(e.Inspect(), uint64(time.Since(start).Nanoseconds()))
 	}
-	result, err = e.Eval(env, 0)
+	result, err = e.Eval(env)
 	return
 }
 
@@ -80,11 +113,11 @@ type mayBeSpecial interface {
 type Callable interface {
 	Evaler
 	HasInfo
-	Call(env *Env, args []Evaler) (results Evaler, err error)
+	Call(env IEnv, args []Evaler) (results Evaler, err error)
 }
 
 type HasInfo interface {
-	Info(env *Env) util.Info
+	Info(env IEnv) util.Info
 }
 
 type Error struct {

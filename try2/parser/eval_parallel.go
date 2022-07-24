@@ -2,17 +2,18 @@ package parser
 
 import (
 	"fmt"
-	errs3 "gitlab.com/coalang/go-coa/try2/errs"
-	"gitlab.com/coalang/go-coa/try2/util"
 	"log"
 	"sync"
 	"time"
+
+	errs3 "gitlab.com/coalang/go-coa/try2/errs"
+	"gitlab.com/coalang/go-coa/try2/util"
 )
 
 // evalParallel evaluates evalers in parallel.
 // TODO: support access to resources in parallel
-func evalParallel(env *Env, evalers []Evaler) ([]Evaler, error) {
-	env.printf("parallel %d", len(evalers))
+func evalParallel(env IEnv, evalers []Evaler) ([]Evaler, error) {
+	env.Printf("parallel %d", len(evalers))
 	if len(evalers) == 0 || len(evalers) == 1 {
 		panic("evalParallel must not be called with 1 or 0 evalers")
 	}
@@ -110,14 +111,14 @@ func evalParallel(env *Env, evalers []Evaler) ([]Evaler, error) {
 	ensure := func(evaler Evaler, uses []string) {
 		var ok sync.Mutex
 		ok.Lock()
-		env.addHook(fmt.Sprintf("eval %s", GetPos(evaler)), func() (keep bool) {
+		env.AddHook(fmt.Sprintf("eval %s", GetPos(evaler)), func() (keep bool) {
 			defer func() {
 				if !keep {
 					ok.Unlock()
 				}
 			}()
 
-			keep = !env.hasKeys(uses)
+			keep = !env.HasKeys(uses)
 			return
 		})
 		ok.Lock() // only runs after the hook calls Unlock
@@ -130,7 +131,7 @@ func evalParallel(env *Env, evalers []Evaler) ([]Evaler, error) {
 		}
 	}
 
-	resources := func(env *Env, indexes []int) []util.ResourceDef {
+	resources := func(env IEnv, indexes []int) []util.ResourceDef {
 		var defs []util.ResourceDef
 		for _, i := range indexes {
 			defs = append(defs, evalers[i].Info(env).Resources...)
@@ -165,7 +166,7 @@ func evalParallel(env *Env, evalers []Evaler) ([]Evaler, error) {
 			for _, j := range strand {
 				re += evalers[j].Inspect() + "\n"
 			}
-			env.printf("strand %d:\n%s", i, re)
+			env.Printf("strand %d:\n%s", i, re)
 			log.Println("res", resources(env, strand))
 			_ = runStrand
 			runStrand(strand)
@@ -210,7 +211,7 @@ func evalParallel(env *Env, evalers []Evaler) ([]Evaler, error) {
 	return merge(evalers, strands), nil
 }
 
-func evalersIsPure(env *Env, evalers []Evaler) bool {
+func evalersIsPure(env IEnv, evalers []Evaler) bool {
 	for _, evaler := range evalers {
 		if len(evaler.Info(env).Resources) > 0 {
 			return false

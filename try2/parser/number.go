@@ -2,10 +2,11 @@ package parser
 
 import (
 	"fmt"
-	"gitlab.com/coalang/go-coa/try2/util"
 	"math"
 	"math/cmplx"
 	"strconv"
+
+	"gitlab.com/coalang/go-coa/try2/util"
 )
 
 type Complex complex128
@@ -15,9 +16,9 @@ var _ BecomesNumberLike = (*Complex)(nil)
 
 func (c *Complex) BecomeNumberLike() NumberLike { return c }
 
-func (c *Complex) Info(_ *Env) util.Info { return util.InfoPure }
+func (c *Complex) Info(_ IEnv) util.Info { return util.InfoPure }
 
-func (c *Complex) Eval(_ *Env, _ int) (result Evaler, err error) { return c, nil }
+func (c *Complex) Eval(_ IEnv) (result Evaler, err error) { return c, nil }
 
 func (c *Complex) Inspect() string { return c.String() }
 
@@ -141,9 +142,9 @@ func (f *Float) BecomeFloat64() float64 { return float64(*f) }
 
 func (f *Float) BecomeNumberLike() NumberLike { return f }
 
-func (f *Float) Info(_ *Env) util.Info { return util.InfoPure }
+func (f *Float) Info(_ IEnv) util.Info { return util.InfoPure }
 
-func (f *Float) Eval(_ *Env, _ int) (result Evaler, err error) { return f, nil }
+func (f *Float) Eval(_ IEnv) (result Evaler, err error) { return f, nil }
 
 func (f *Float) Inspect() string { return f.String() }
 
@@ -262,9 +263,9 @@ func (i *Int) BecomeFloat64() float64 { return float64(*i) }
 
 func (i *Int) BecomeNumberLike() NumberLike { return i }
 
-func (i *Int) Info(_ *Env) util.Info { return util.InfoPure }
+func (i *Int) Info(_ IEnv) util.Info { return util.InfoPure }
 
-func (i *Int) Eval(_ *Env, _ int) (result Evaler, err error) { return i, nil }
+func (i *Int) Eval(_ IEnv) (result Evaler, err error) { return i, nil }
 
 func (i *Int) Inspect() string { return i.String() }
 

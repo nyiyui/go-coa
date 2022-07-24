@@ -39,16 +39,16 @@ func (b *Block) IDSets() []string { return nil /* only-outside-facing part matte
 
 var _ Callable = new(Block)
 
-func (b *Block) Info(env *Env) util.Info            { return b.Content.Info(env) }
-func (b *Block) Eval(_ *Env, _ int) (Evaler, error) { return b, nil }
+func (b *Block) Info(env IEnv) util.Info     { return b.Content.Info(env) }
+func (b *Block) Eval(_ IEnv) (Evaler, error) { return b, nil }
 
-func (b *Block) Call(env *Env, args []Evaler) (results Evaler, err error) {
-	inner := env.inherit(b.Pos)
+func (b *Block) Call(env IEnv, args []Evaler) (results Evaler, err error) {
+	inner := env.Inherit(b.Pos)
 	for i, arg := range args {
-		inner.def(fmt.Sprintf("$%d", i), arg)
+		inner.Def(fmt.Sprintf("$%d", i), arg)
 	}
 	b.Content.DisallowParallel = !b.runParallel()
-	result, err := b.Content.Eval(inner, 0)
+	result, err := b.Content.Eval(inner)
 	if err != nil {
 		return ReturnVals(err)
 	}

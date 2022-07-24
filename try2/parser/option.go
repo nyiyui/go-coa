@@ -2,28 +2,29 @@ package parser
 
 import (
 	"fmt"
-	"gitlab.com/coalang/go-coa/try2/util"
 	"reflect"
+
+	"gitlab.com/coalang/go-coa/try2/util"
 )
 
-type Option func(env *Env, args []Evaler) ([]Evaler, error)
+type Option func(env IEnv, args []Evaler) ([]Evaler, error)
 
 var (
-	TypeID             = new(ID)
-	TypeBool           = new(Bool)
-	TypeNumber         = new(Number)
-	TypeNumberLike     = special(func(evaler Evaler) bool { _, ok := evaler.(NumberLike); return ok })
-	TypeBecomesNumberLike     = special(func(evaler Evaler) bool { _, ok := evaler.(BecomesNumberLike); return ok })
-	TypeString         = new(String)
-	TypeBecomesString  = special(func(evaler Evaler) bool { _, ok := evaler.(BecomesString); return ok })
-	TypeBecomesFloat64 = special(func(evaler Evaler) bool { _, ok := evaler.(BecomesFloat64); return ok })
-	TypeRune           = new(Rune)
-	TypeCallable       = special(func(evaler Evaler) bool { _, ok := evaler.(Callable); return ok })
-	TypeAny            = special(func(Evaler) bool { return true })
-	TypeMap            = new(Map)
-	TypeHasNodes       = special(func(evaler Evaler) bool { _, ok := evaler.(HasNodes); return ok })
-	TypeIter           = special(func(evaler Evaler) bool { _, ok := evaler.(Iter); return ok })
-	TypeMapLike        = special(func(evaler Evaler) bool { _, ok := evaler.(MapLike); return ok })
+	TypeID                = new(ID)
+	TypeBool              = new(Bool)
+	TypeNumber            = new(Number)
+	TypeNumberLike        = special(func(evaler Evaler) bool { _, ok := evaler.(NumberLike); return ok })
+	TypeBecomesNumberLike = special(func(evaler Evaler) bool { _, ok := evaler.(BecomesNumberLike); return ok })
+	TypeString            = new(String)
+	TypeBecomesString     = special(func(evaler Evaler) bool { _, ok := evaler.(BecomesString); return ok })
+	TypeBecomesFloat64    = special(func(evaler Evaler) bool { _, ok := evaler.(BecomesFloat64); return ok })
+	TypeRune              = new(Rune)
+	TypeCallable          = special(func(evaler Evaler) bool { _, ok := evaler.(Callable); return ok })
+	TypeAny               = special(func(Evaler) bool { return true })
+	TypeMap               = new(Map)
+	TypeHasNodes          = special(func(evaler Evaler) bool { _, ok := evaler.(HasNodes); return ok })
+	TypeIter              = special(func(evaler Evaler) bool { _, ok := evaler.(Iter); return ok })
+	TypeMapLike           = special(func(evaler Evaler) bool { _, ok := evaler.(MapLike); return ok })
 )
 
 type NumberLike interface {
@@ -103,7 +104,7 @@ func anyOf(ts ...interface{}) special {
 type special func(Evaler) bool
 
 func OptionArgsPrefix(argTypes ...interface{}) Option {
-	return func(env *Env, args []Evaler) (_ []Evaler, err error) {
+	return func(env IEnv, args []Evaler) (_ []Evaler, err error) {
 		if len(argTypes) > len(args) {
 			return nil, fmt.Errorf("wanted %s+, got %s (length)", util.StringSliceInterface(argTypes), StringSliceEvaler(args))
 		}
@@ -124,7 +125,7 @@ func OptionArgsPrefix(argTypes ...interface{}) Option {
 	}
 }
 
-func OptionNone(_ *Env, args []Evaler) ([]Evaler, error) {
+func OptionNone(_ IEnv, args []Evaler) ([]Evaler, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("wanted 0, got %s (length)", StringSliceEvaler(args))
 	}
@@ -132,7 +133,7 @@ func OptionNone(_ *Env, args []Evaler) ([]Evaler, error) {
 }
 
 func OptionArgs(argTypes ...interface{}) Option {
-	return func(env *Env, args []Evaler) (_ []Evaler, err error) {
+	return func(env IEnv, args []Evaler) (_ []Evaler, err error) {
 		if len(argTypes) != len(args) {
 			return nil, fmt.Errorf("wanted %s, got %s (length)", util.StringSliceInterface(argTypes), StringSliceEvaler(args))
 		}
@@ -154,7 +155,7 @@ func OptionArgs(argTypes ...interface{}) Option {
 }
 
 func OptionVariadic(argType interface{}) Option {
-	return func(env *Env, args []Evaler) ([]Evaler, error) {
+	return func(env IEnv, args []Evaler) ([]Evaler, error) {
 		for i, arg := range args {
 			var argOk bool
 			if at, ok := argType.(special); ok {

@@ -40,14 +40,14 @@ func (n *Number) UnmarshalJSON(bytes []byte) error {
 	return nil
 }
 
-func (n *Number) Info(_ *Env) util.Info              { return util.InfoPure }
-func (n *Number) Eval(_ *Env, _ int) (Evaler, error) { return n, nil }
-func (n *Number) String() string                     { return strconv.FormatFloat(float64(*n), 'f', -1, 64) }
-func (n *Number) Inspect() string                    { return n.String() }
-func (n *Number) IDUses() []string                   { return nil }
-func (n *Number) IDSets() []string                   { return nil }
-func (n *Number) BecomeString() string               { return strconv.FormatFloat(float64(*n), 'f', -1, 64) }
-func (n *Number) BecomeFloat64() float64             { return float64(*n) }
+func (n *Number) Info(_ IEnv) util.Info       { return util.InfoPure }
+func (n *Number) Eval(_ IEnv) (Evaler, error) { return n, nil }
+func (n *Number) String() string              { return strconv.FormatFloat(float64(*n), 'f', -1, 64) }
+func (n *Number) Inspect() string             { return n.String() }
+func (n *Number) IDUses() []string            { return nil }
+func (n *Number) IDSets() []string            { return nil }
+func (n *Number) BecomeString() string        { return strconv.FormatFloat(float64(*n), 'f', -1, 64) }
+func (n *Number) BecomeFloat64() float64      { return float64(*n) }
 
 type ID struct {
 	Pos     lexer.Position
@@ -61,17 +61,16 @@ func (i *ID) Accept(v Visitor) { v.VisitID(i) }
 func (i *ID) MarshalJSON() ([]byte, error) {
 	return json.Marshal(nil)
 }
-
-func (i *ID) Eval(env *Env, _ int) (Evaler, error) {
-	evaler, ok := env.get(i.Content)
+func (i *ID) Eval(env IEnv) (Evaler, error) {
+	evaler, ok := env.Get(i.Content)
 	if !ok {
 		return nil, fmt.Errorf("%s (%p): %s not found", i.Pos, i, i.Content)
 	}
 	return evaler, nil
 }
 
-func (i *ID) Info(env *Env) util.Info {
-	evaler, ok := env.get(i.Content)
+func (i *ID) Info(env IEnv) util.Info {
+	evaler, ok := env.Get(i.Content)
 	if !ok {
 		return util.InfoPure
 	}
@@ -109,12 +108,12 @@ func (s *String) MarshalJSON() ([]byte, error) {
 }
 
 func NewString(s string) *String        { return &String{Content: s} }
-func (s *String) Info(_ *Env) util.Info { return util.InfoPure }
-func (s *String) Eval(env *Env, order int) (result Evaler, err error) {
+func (s *String) Info(_ IEnv) util.Info { return util.InfoPure }
+func (s *String) Eval(env IEnv) (result Evaler, err error) {
 	var errOuter error
 	s2 := stringTmplPattern.ReplaceAllStringFunc(s.Content, func(match string) string {
 		s3 := ID{Content: match[1:]}
-		replaced, err := (&s3).Eval(env, order)
+		replaced, err := (&s3).Eval(env)
 		if err != nil {
 			errOuter = err
 		}
@@ -181,12 +180,12 @@ func (r *Rune) MarshalJSON() ([]byte, error) {
 	return json.Marshal(rune(*r))
 }
 
-func (r *Rune) Info(_ *Env) util.Info                         { return util.InfoPure }
-func (r *Rune) Eval(_ *Env, _ int) (result Evaler, err error) { return r, nil }
-func (r *Rune) String() string                                { return string(*r) }
-func (r *Rune) Inspect() string                               { return strconv.QuoteRune(rune(*r)) }
-func (r *Rune) IDUses() []string                              { return nil }
-func (r *Rune) IDSets() []string                              { return nil }
+func (r *Rune) Info(_ IEnv) util.Info                  { return util.InfoPure }
+func (r *Rune) Eval(_ IEnv) (result Evaler, err error) { return r, nil }
+func (r *Rune) String() string                         { return string(*r) }
+func (r *Rune) Inspect() string                        { return strconv.QuoteRune(rune(*r)) }
+func (r *Rune) IDUses() []string                       { return nil }
+func (r *Rune) IDSets() []string                       { return nil }
 func (r *Rune) Capture(values []string) error {
 	unquoted, err := strconv.Unquote(values[0])
 	if err != nil {

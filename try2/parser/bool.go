@@ -25,6 +25,8 @@ func BoolFromEvaler(evaler Evaler) (bool, error) {
 	switch evaler := evaler.(type) {
 	case nil:
 		return false, nil
+	case Bool:
+		return evaler.Content, nil
 	case *Bool:
 		return evaler.Content, nil
 	case *Number:
@@ -36,8 +38,9 @@ func BoolFromEvaler(evaler Evaler) (bool, error) {
 
 var TypeBecomeBool = anyNilOf(TypeBool, TypeNumber)
 
-func (b Bool) Info(_ *Env) util.Info                         { return util.InfoPure }
-func (b Bool) Eval(_ *Env, _ int) (result Evaler, err error) { return b, nil }
+func (b Bool) Info(_ IEnv) util.Info                   { return util.InfoPure }
+func (b Bool) Eval(_ IEnv) (result Evaler, err error)  { return b, nil }
+func (b Bool) Eval2(_ IEnv) (result Evaler, err error) { return b, nil }
 
 func (b Bool) String() string {
 	if b.Content {

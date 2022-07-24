@@ -26,14 +26,14 @@ func (n *Nodes) Index(i int) (key, value Evaler) { return NewNumber(float64(i)),
 var _ Evaler = new(Nodes)
 var _ Iter = new(Nodes)
 
-func (n *Nodes) Info(env *Env) util.Info {
+func (n *Nodes) Info(env IEnv) util.Info {
 	resources := make([]util.ResourceDef, 0)
 	for _, node := range n.Content {
 		resources = append(resources, node.Select().Info(env).Resources...)
 	}
 	return util.Info{Resources: resources}
 }
-func (n *Nodes) Eval(env *Env, _ int) (Evaler, error) {
+func (n *Nodes) Eval(env IEnv) (Evaler, error) {
 	if len(n.Content) == 0 {
 		return nil, nil
 	}

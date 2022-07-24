@@ -5,10 +5,10 @@ import "sync"
 var costCache = map[string]uint64{}
 var costCacheMu sync.RWMutex
 
-func costCacheSet(key string,value uint64) {
+func costCacheSet(key string, value uint64) {
 	costCacheMu.Lock()
 	defer costCacheMu.Unlock()
-	costCache[key]=value
+	costCache[key] = value
 }
 
 func costOfResource(res string) (cost uint64) {
@@ -25,7 +25,7 @@ func costOfResource(res string) (cost uint64) {
 }
 
 func costOfEvaling(env *Env, evaler Evaler) (cost uint64) {
-	if evaler==nil {
+	if evaler == nil {
 		return
 	}
 	{
@@ -69,7 +69,7 @@ func costOfEvaling(env *Env, evaler Evaler) (cost uint64) {
 		}
 		return
 	case *ID:
-		evaler2, ok := env.get(evaler.Content)
+		evaler2, ok := env.Get(evaler.Content)
 		if !ok {
 			return 0
 		}

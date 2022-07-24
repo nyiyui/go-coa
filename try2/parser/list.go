@@ -41,8 +41,8 @@ var _ Evaler = new(List)
 var _ HasNodes = new(List)
 var _ Iter = new(List)
 
-func (l *List) Info(env *Env) util.Info { return l.Content.Info(env) }
-func (l *List) Eval(env *Env, order int) (_ Evaler, err error) {
+func (l *List) Info(env IEnv) util.Info { return l.Content.Info(env) }
+func (l *List) Eval(env IEnv) (_ Evaler, err error) {
 	if l.isMap() {
 		return newMapFromNodes(l.Content)
 	}

@@ -1,9 +1,10 @@
 package parser
 
 import (
-	"gitlab.com/coalang/go-coa/try2/util"
 	"os"
 	"strings"
+
+	"gitlab.com/coalang/go-coa/try2/util"
 )
 
 type SysEnv struct {
@@ -21,12 +22,12 @@ var _ Evaler = new(SysEnv)
 var _ MapLike = new(SysEnv)
 var _ Iter = new(SysEnv)
 
-func (o *SysEnv) Info(_ *Env) util.Info                         { return util.InfoPure }
-func (o *SysEnv) Eval(_ *Env, _ int) (result Evaler, err error) { return o, nil }
-func (o *SysEnv) String() string                                { return "@sys_env" }
-func (o *SysEnv) Inspect() string                               { return "@sys_env" }
-func (o *SysEnv) IDUses() []string                              { return nil }
-func (o *SysEnv) IDSets() []string                              { return nil }
+func (o *SysEnv) Info(_ IEnv) util.Info                  { return util.InfoPure }
+func (o *SysEnv) Eval(_ IEnv) (result Evaler, err error) { return o, nil }
+func (o *SysEnv) String() string                         { return "@sys_env" }
+func (o *SysEnv) Inspect() string                        { return "@sys_env" }
+func (o *SysEnv) IDUses() []string                       { return nil }
+func (o *SysEnv) IDSets() []string                       { return nil }
 func (o *SysEnv) Get(key string) (Evaler, bool, error) {
 	value, ok := os.LookupEnv(key)
 	return NewString(value), ok, nil

@@ -74,16 +74,14 @@ func newMapFromNodes(nodes Nodes) (*Map, error) {
 	}
 	return m, nil
 }
-func (m *Map) Info(env *Env) util.Info {
+func (m *Map) Info(env IEnv) util.Info {
 	re := make([]util.ResourceDef, 0)
 	for _, value := range m.Content {
 		re = append(re, value.Info(env).Resources...)
 	}
 	return util.Info{Resources: re}
 }
-func (m *Map) Eval(_ *Env, _ int) (result Evaler, err error) {
-	return m, nil
-}
+func (m *Map) Eval(_ IEnv) (result Evaler, err error) { return m, nil }
 func (m *Map) String() string {
 	re := "[m\n"
 	for key, val := range m.Content {

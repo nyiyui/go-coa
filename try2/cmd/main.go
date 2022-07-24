@@ -9,6 +9,7 @@ import (
 	"github.com/alecthomas/participle/v2/lexer"
 	"gitlab.com/coalang/go-coa/try2/compile"
 	"gitlab.com/coalang/go-coa/try2/parser"
+	"gitlab.com/coalang/go-coa/try2/vm"
 )
 
 func main_() error {
@@ -40,20 +41,31 @@ func main_() error {
 			os.Exit(code)
 		}
 	}
+
 	ce := compile.NewEnv(lexer.Position{Filename: "root"})
 	s := ce.NewScope()
 	insts, err := s.CompileNodes(*root)
 	if err != nil {
 		return err
 	}
-	log.Printf("instructions:\n%s", compile.Instructions(insts))
+	s2 := compile.Instructions(insts).String()
+	log.Printf("instructions:\n%s", s2)
+
+	{
+		p := vm.NewProgram(insts)
+		v := vm.NewVM()
+		err = v.Execute(p)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func main() {
 	err := main_()
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "error lul\n%s", err)
+		_, _ = fmt.Fprintf(os.Stderr, "error lul\n%s\n", err)
 		os.Exit(1)
 	}
 }

@@ -32,7 +32,8 @@ type wrap struct {
 func (is Instructions) String() string {
 	b := strings.Builder{}
 	wraps := make([]wrap, 0)
-	for _, i := range is {
+	for n, i := range is {
+		fmt.Fprintf(&b, "+%03x: ", n)
 		if i.Opcode != OpUnwrap {
 			b.WriteString(strings.Repeat("│ ", len(wraps)))
 		}
@@ -43,6 +44,11 @@ func (is Instructions) String() string {
 			wraps = append(wraps, w)
 			fmt.Fprintf(&b, "┌ %s\n", name)
 		case OpUnwrap:
+			if len(wraps) == 0 {
+				b.WriteString(strings.Repeat("│ ", len(wraps)))
+				fmt.Fprintf(&b, "warning: unwrap without wrap: %s\n", &i)
+				continue
+			}
 			cw := wraps[len(wraps)-1]
 			if cw.Level != i.A {
 				b.WriteString("warning: unwrap level mismatch\n")
@@ -62,65 +68,80 @@ func (is Instructions) String() string {
 
 type Opcode uint8
 
-func (o Opcode) String() string {
-	switch o {
-	case OpNop:
-		return "nop"
-	case OpWrap:
-		return "wrap"
-	case OpUnwrap:
-		return "unwrap"
-	case OpConst:
-		return "const"
-	case OpPop:
-		return "pop"
-	case OpDynVar:
-		return "dynvar"
+type OpcodeInfo struct {
+	Name  string
+	Short string
+}
 
-	case OpWellKnown:
-		return "wk"
-	case OpBool:
-		return "bool"
+var opcodeInfo = [...]*OpcodeInfo{
+	OpNop:    {"Nop", "n"},
+	OpWrap:   {"Wrap", "w"},
+	OpUnwrap: {"Unwrap", "u"},
+	OpPop:    {"Pop", "p"},
+	OpDynVar: {"DynVar", "d"},
 
-	case OpCall:
-		return "call"
-	case OpLit:
-		return "L"
+	//OpWellKnown: {"WellKnown", "wk"},
+	OpBool: {"Bool", "b"},
 
-	case OpMakeList:
-		return "Ml"
-	case OpMakeString:
-		return "Ms"
+	OpVarDeclare:  {"VarDeclare", "Ve"},
+	OpVarReassign: {"VarReassign", "Vr"},
+	OpVarAssign:   {"VarAssign", "Va"},
+	OpVarLoad:     {"VarLoad", "Vl"},
+	OpArgLoad:     {"ArgLoad", "Al"},
 
-	case OpBlockStart:
-		return "Ls"
-	case OpBlockEnd:
-		return "Le"
+	OpCall: {"Call", "c"},
+	OpLit:  {"Lit", "l"},
 
-	case OpBundleStart:
-		return "Bs"
-	case OpStrandStart:
-		return "Ss"
-	case OpStrandTodo:
-		return "St"
-	case OpStrandReverseDeps:
-		return "Srd"
-	case OpStrandInvoke:
-		return "Si"
-	case OpStrandEnd:
-		return "Se"
-	case OpBundleEnd:
-		return "Be"
+	OpMakeList:   {"MakeList", "Ml"},
+	OpMakeString: {"MakeString", "Ms"},
 
-	case OpPos:
-		return "pos"
+	OpBlockStart: {"BlockStart", "Os"},
+	OpBlockEnd:   {"BlockEnd", "Oe"},
 
-	case OpLitNumber:
-		return "Ln"
+	OpBundleStart:       {"BundleStart", "Bs"},
+	OpStrandStart:       {"StrandStart", "Ss"},
+	OpStrandTodo:        {"StrandTodo", "St"},
+	OpStrandReverseDeps: {"StrandReverseDeps", "Srd"},
+	OpStrandInvoke:      {"StrandInvoke", "Si"},
+	OpStrandEnd:         {"StrandEnd", "Se"},
+	OpBundleEnd:         {"BundleEnd", "Be"},
 
-	default:
-		return fmt.Sprintf("invalid %x", o)
+	OpPos: {"Pos", "pos"},
+
+	OpLitNumber: {"LitNumber", "Ln"},
+	OpLitString: {"LitString", "Ls"},
+	OpLitRune:   {"LitRune", "Lr"},
+}
+
+func (o Opcode) info() *OpcodeInfo {
+	if o >= Opcode(len(opcodeInfo)) {
+		return nil
 	}
+	return opcodeInfo[o]
+}
+
+func (o Opcode) String() string {
+	info := o.info()
+	if info == nil {
+		return fmt.Sprintf("I%x", uint8(o))
+	}
+	return info.Short
+}
+
+func (o Opcode) Name() string {
+	info := o.info()
+	if info == nil {
+		return fmt.Sprintf("Invalid_%x", uint8(o))
+	}
+	return info.Name
+}
+
+func (o Opcode) Full() string {
+	info := o.info()
+	if info == nil {
+		return fmt.Sprintf("%x I%x Invalid_%x", uint8(o), uint8(o), uint8(o))
+	}
+	return fmt.Sprintf("%x %s %s", uint8(o), info.Short, info.Name)
 }
 
 // NOTE: @ = ttop of stack; @1 = 2nd item on stack
@@ -129,16 +150,22 @@ const (
 	OpNop Opcode = iota
 	OpWrap
 	OpUnwrap
-	OpConst
 	OpPop // pop A frames from stack
 	OpDynVar
 
-	OpWellKnown // pushes a well-known value with number A
-	OpBool      // pushes true if A == 0, false if A == 1, panics otherwise
+	//OpWellKnown // pushes a well-known value with number A
+	OpBool // pushes true if A == 0, false if A == 1, panics otherwise
+
+	OpVarDeclare  // declare number of variable used in block onwards and it may reset all vars.
+	OpVarReassign // reassigns the top of the stack to be A
+	OpVarAssign   // assigns variable at A with @
+	OpVarLoad     // load variable at A
+	OpArgLoad     // load argument at A
 
 	OpCall
-	// OpCall calls @ with A arguments (@1, @2, @3, ...)
+	// OpCall calls @ with A arguments
 	// i.e. @(@1, @2, @3, ...)
+	//
 
 	OpLit // OpLit pushes a literal value from B. The type is specified using A.
 
@@ -164,6 +191,8 @@ const (
 	OpPos // sets the position until the next OpPos with B
 
 	OpLitNumber
+	OpLitString
+	OpLitRune
 )
 
 func op1(code Opcode) Instruction { return Instruction{code, 0, nil} }

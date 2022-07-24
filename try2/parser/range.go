@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+
 	"gitlab.com/coalang/go-coa/try2/util"
 )
 
@@ -9,9 +10,9 @@ type Range struct {
 	start, stop, step int
 }
 
-func (r *Range) Info(_ *Env) util.Info { return util.InfoPure }
+func (r *Range) Info(_ IEnv) util.Info { return util.InfoPure }
 
-func (r *Range) Eval(_ *Env, _ int) (result Evaler, err error) { return r, nil }
+func (r *Range) Eval(_ IEnv) (result Evaler, err error) { return r, nil }
 
 func (r *Range) String() string { return fmt.Sprintf("(@range %d %d %d)", r.start, r.start, r.step) }
 

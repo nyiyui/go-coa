@@ -4,17 +4,52 @@
 #  |
 #  v
 #  c
-(@def a {
-	(@add 1 2)
-})
 
-(@def add_1 {
-	(@add $0 1)
-})
+(@io_outln (@inspect (@add 1 2)))
+
+(@def f { 1 })
+
+(@io_outln (@inspect (f)))
+
+(@assert @true "true is true")
+
+
+(@def the_answer 42)
+
+(@def get_the_answer { the_answer })
+
+(@io_outln (@inspect (get_the_answer)))
 
 (@io_outln (@inspect ({
-	(@def one (a)) # 3
-	(@mod one (add_1 one)) # 4
-	(@def two (add_1 (a))) # 4
-	(@add one two) # 8
+	(get_the_answer)
 })))
+
+
+(@def add_1 { (@add 1 $0) })
+
+(add_1 2)
+
+(@assert (@eq ({ (add_1 2) }) 3) "1+2=3")
+
+
+(@assert (@eq 'a' 'a') "rune test")
+
+
+(@def a 1)
+(@def b 2)
+(@def c (@add a b))
+(@assert (@eq c 3) "a+b=3")
+
+
+({
+	(@def a 1)
+	(@def b 2)
+	(@def c (@add a b))
+	(@assert (@eq c 3) "a+b=3")
+})
+
+
+({
+	# use outer function
+	(@assert (@eq (get_the_answer) 42) "the answer is 42")
+})

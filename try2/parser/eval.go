@@ -16,7 +16,7 @@ func idProviderNone(_ *Call) []string {
 var idSetsProviders = map[string]idProvider{}
 var idUsesProviders = map[string]idProvider{}
 
-func eval(env *Env, allowParallel bool, evalers []Evaler) ([]Evaler, error) {
+func eval(env IEnv, allowParallel bool, evalers []Evaler) ([]Evaler, error) {
 	err := checkEvalersRuntime(env, evalers)
 	if err != nil {
 		return nil, err
@@ -24,8 +24,8 @@ func eval(env *Env, allowParallel bool, evalers []Evaler) ([]Evaler, error) {
 	return eval_(env, allowParallel, evalers)
 }
 
-func checkEvalersRuntime(env *Env, evalers []Evaler) (err error) {
-	uses, sets := make([]string, 0), env.keys()
+func checkEvalersRuntime(env IEnv, evalers []Evaler) (err error) {
+	uses, sets := make([]string, 0), env.Keys()
 	for _, evaler := range evalers {
 		uses = append(uses, util.NoBuiltins(evaler.IDUses())...)
 		sets = append(sets, util.NoBuiltins(evaler.IDSets())...)
@@ -48,11 +48,11 @@ func checkEvalersRuntime(env *Env, evalers []Evaler) (err error) {
 	return
 }
 
-func eval_(env *Env, _ bool, evalers []Evaler) ([]Evaler, error) {
+func eval_(env IEnv, _ bool, evalers []Evaler) ([]Evaler, error) {
 	if len(evalers) == 0 {
 		return []Evaler{}, nil
 	}
-	if env.allowParallel &&
+	if env.AllowParallel2() &&
 		len(evalers) != 1 && // no point in parallelizing a single function call
 		evalersIsPure(env, evalers) {
 		return evalParallel2(env, evalers)
@@ -61,9 +61,9 @@ func eval_(env *Env, _ bool, evalers []Evaler) ([]Evaler, error) {
 	}
 }
 
-func evalSeries(env *Env, evalers []Evaler) ([]Evaler, error) {
-	if env.debug {
-		env.printf("series %d", len(evalers))
+func evalSeries(env IEnv, evalers []Evaler) ([]Evaler, error) {
+	if env.Debug2() {
+		env.Printf("series %d", len(evalers))
 	}
 	var err error
 	for i, evaler := range evalers {

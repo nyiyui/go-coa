@@ -3,13 +3,14 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+
 	"gitlab.com/coalang/go-coa/try2/util"
 )
 
-type NativeFunc func(env *Env, args []Evaler) (Evaler, error)
+type NativeFunc func(env IEnv, args []Evaler) (Evaler, error)
 
 type Native struct {
-	_ util.NoCopy
+	_       util.NoCopy
 	f       NativeFunc
 	i       util.Info
 	special bool
@@ -30,7 +31,7 @@ func nativeSpecial(name string, uses, sets idProvider, native *Native) *Native {
 }
 
 func NewNative(info util.Info, native NativeFunc, options ...Option) *Native {
-	return &Native{i: info, f: func(env *Env, args []Evaler) (Evaler, error) {
+	return &Native{i: info, f: func(env IEnv, args []Evaler) (Evaler, error) {
 		var err error
 		for _, option := range options {
 			args, err = option(env, args)
@@ -50,9 +51,9 @@ func (n *Native) String() string {
 	}
 	return fmt.Sprintf("(@native %p%s)", n.f, i)
 }
-func (n *Native) Inspect() string                               { return n.String() }
-func (n *Native) Info(_ *Env) util.Info                         { return n.i }
-func (n *Native) Eval(_ *Env, _ int) (result Evaler, err error) { return n, nil }
-func (n *Native) Call(env *Env, args []Evaler) (Evaler, error)  { return n.f(env, args) }
-func (n *Native) IDUses() []string                              { return nil }
-func (n *Native) IDSets() []string                              { return nil }
+func (n *Native) Inspect() string                              { return n.String() }
+func (n *Native) Info(_ IEnv) util.Info                        { return n.i }
+func (n *Native) Eval(_ IEnv) (result Evaler, err error)       { return n, nil }
+func (n *Native) Call(env IEnv, args []Evaler) (Evaler, error) { return n.f(env, args) }
+func (n *Native) IDUses() []string                             { return nil }
+func (n *Native) IDSets() []string                             { return nil }

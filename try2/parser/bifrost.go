@@ -6,12 +6,12 @@ var Bifrost = &bifrost{}
 
 type bifrost struct{}
 
-func (b *bifrost) Profile(env *Env) {
-	fmt.Println(env.dump())
+func (b *bifrost) Profile(env IEnv) {
+	fmt.Println(env.Dump())
 }
 
-func (b *bifrost) Peek(env *Env, evalers []Evaler) {
-	dump := env.dump()
+func (b *bifrost) Peek(env IEnv, evalers []Evaler) {
+	dump := env.Dump()
 	dump.Vars = nil
 	fmt.Println(dump)
 	for i, evaler := range evalers {

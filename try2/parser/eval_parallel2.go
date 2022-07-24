@@ -24,16 +24,16 @@ func CompileEvalers(keys []string, evalers []Evaler) ([]*strand, error) {
 	return strands, nil
 }
 
-func evalParallel2(env *Env, evalers []Evaler) ([]Evaler, error) {
-	log.Println("evalParallel2", env, env.keys())
-	strands, err := CompileEvalers(env.keys(), evalers)
+func evalParallel2(env IEnv, evalers []Evaler) ([]Evaler, error) {
+	log.Println("evalParallel2", env, env.Keys())
+	strands, err := CompileEvalers(env.Keys(), evalers)
 	if err != nil {
 		return nil, err
 	}
 	if len(strands) == 1 {
 		// short-circuit
-		if env.debug {
-			env.printf("sc %d", len(evalers))
+		if env.Debug2() {
+			env.Printf("sc %d", len(evalers))
 		}
 		s := strands[0]
 		for _, i := range s.Todo {
@@ -43,19 +43,19 @@ func evalParallel2(env *Env, evalers []Evaler) ([]Evaler, error) {
 			}
 		}
 	}
-	if env.debug {
-		env.printf("parallel %d", len(evalers))
+	if env.Debug2() {
+		env.Printf("parallel %d", len(evalers))
 	}
 	r := runStrands(env, evalers, strands)
 	err = r.waitResults(env, strands, evalers)
-	if env.debug {
-		env.printf("parallel %d done", len(evalers))
+	if env.Debug2() {
+		env.Printf("parallel %d done", len(evalers))
 	}
 	return evalers, err
 	//return evalers, waitResults(env, strands, evalers, ch)
 }
 
-func (r *runEnv) waitResults(env *Env, ss []*strand, evalers []Evaler) error {
+func (r *runEnv) waitResults(env IEnv, ss []*strand, evalers []Evaler) error {
 	recvd := 0
 	var poss []int
 	errs := errs2.Errors{}
@@ -80,7 +80,7 @@ func (r *runEnv) waitResults(env *Env, ss []*strand, evalers []Evaler) error {
 }
 
 /*
-func waitResults(env *Env, ss []*strand, evalers []Evaler, ch chan result) error {
+func waitResults(env IEnv, ss []*strand, evalers []Evaler, ch chan result) error {
 	recvd := 0
 	var poss []int
 	go func() {
@@ -319,7 +319,7 @@ func getStrands(evalers []Evaler, depss evalersDeps) []*strand {
 	return strands
 }
 
-func printStrand(env *Env, evalers []Evaler, i int, s *strand) {
+func printStrand(env IEnv, evalers []Evaler, i int, s *strand) {
 	b := new(strings.Builder)
 	fmt.Fprintf(b, "strand %d:\n", i)
 	fmt.Fprintf(b, "\ttodo:\n")
@@ -334,7 +334,7 @@ func printStrand(env *Env, evalers []Evaler, i int, s *strand) {
 	for _, j := range s.Deps {
 		fmt.Fprintf(b, "\t\t%d\n", j)
 	}
-	env.printf("%s\n", b.String())
+	env.Printf("%s\n", b.String())
 }
 
 func inspect(evaler Evaler) string {
@@ -350,11 +350,11 @@ type runEnv struct {
 	strandsStartCh      []chan struct{}
 	ss                  []*strand
 	evalers             []Evaler
-	env                 *Env
+	env                 IEnv
 	ch                  chan result
 }
 
-func newRunEnv(env *Env, evalers []Evaler, ss []*strand) *runEnv {
+func newRunEnv(env IEnv, evalers []Evaler, ss []*strand) *runEnv {
 	n := len(evalers)
 	re := &runEnv{
 		strandsDepCount:     make([]int, n),
@@ -385,11 +385,11 @@ func startStrands(ss []*strand) (starts []strandIndex) {
 	return starts
 }
 
-func runStrands(env *Env, evalers []Evaler, ss []*strand) *runEnv {
+func runStrands(env IEnv, evalers []Evaler, ss []*strand) *runEnv {
 	r := newRunEnv(env, evalers, ss)
 	starts := startStrands(ss)
 	// TODO: run only start strands
-	if env.debug {
+	if env.Debug2() {
 		for i, s := range ss {
 			printStrand(env, evalers, i, s)
 		}
@@ -404,7 +404,7 @@ func runStrands(env *Env, evalers []Evaler, ss []*strand) *runEnv {
 	return r
 }
 
-func (r *runEnv) signalDepDone(env *Env, strandI strandIndex) {
+func (r *runEnv) signalDepDone(env IEnv, strandI strandIndex) {
 	r.strandsDepCountLock[strandI].Lock()
 	defer r.strandsDepCountLock[strandI].Unlock()
 	r.strandsDepCount[strandI]--
@@ -416,7 +416,7 @@ func (r *runEnv) signalDepDone(env *Env, strandI strandIndex) {
 	}
 }
 
-func (r *runEnv) signalDepDone2(env *Env, strandI strandIndex) bool {
+func (r *runEnv) signalDepDone2(env IEnv, strandI strandIndex) bool {
 	r.strandsDepCountLock[strandI].Lock()
 	defer r.strandsDepCountLock[strandI].Unlock()
 	r.strandsDepCount[strandI]--
@@ -443,14 +443,14 @@ func (r *runEnv) runStartStrand(strandI strandIndex) {
 		if rdLastDepDone {
 			if lastRD {
 				// takeover so we don't have to spawn superfluous goroutines
-				if r.env.debug {
-					r.env.printf("%stakeover %d", prefix, reverseDep)
+				if r.env.Debug2() {
+					r.env.Printf("%stakeover %d", prefix, reverseDep)
 				}
 				r.runStartStrand(reverseDep)
 			} else {
 				// spawn
-				if r.env.debug {
-					r.env.printf("%sspawn %d", prefix, reverseDep)
+				if r.env.Debug2() {
+					r.env.Printf("%sspawn %d", prefix, reverseDep)
 				}
 				go r.runStartStrand(reverseDep)
 			}
@@ -458,15 +458,15 @@ func (r *runEnv) runStartStrand(strandI strandIndex) {
 	}
 }
 
-func (r *runEnv) runStrand(env *Env, evalers []Evaler, ch chan<- result, strandI strandIndex) {
-	env.printf("runStrand %d", strandI)
+func (r *runEnv) runStrand(env IEnv, evalers []Evaler, ch chan<- result, strandI strandIndex) {
+	env.Printf("runStrand %d", strandI)
 	<-r.strandsStartCh[strandI]
-	env.printf("runStrand start %d", strandI)
+	env.Printf("runStrand start %d", strandI)
 	s := r.ss[strandI]
 	for _, i := range s.Todo {
 		r.runEvaler(i)
 	}
-	env.printf("runStrand sendSignals %d", strandI)
+	env.Printf("runStrand sendSignals %d", strandI)
 	for _, reverseDep := range s.ReverseDeps {
 		r.signalDepDone(env, reverseDep)
 	}
@@ -484,7 +484,7 @@ func (r *runEnv) runEvaler(i evalerIndex) {
 	}
 }
 
-func runEvaler(env *Env, evalers []Evaler, ch chan<- result, i evalerIndex) {
+func runEvaler(env IEnv, evalers []Evaler, ch chan<- result, i evalerIndex) {
 	var err error
 	start := time.Now()
 	evalers[i], err = Eval(evalers[i], env)

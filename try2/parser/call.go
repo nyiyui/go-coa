@@ -26,8 +26,8 @@ func (c *Call) MarshalJSON() ([]byte, error) {
 
 var _ Evaler = new(Call)
 
-func (c *Call) Info(env *Env) util.Info { return c.Content.Info(env) }
-func (c *Call) ee(env *Env, _ int) (Callable, error) {
+func (c *Call) Info(env IEnv) util.Info { return c.Content.Info(env) }
+func (c *Call) ee(env IEnv) (Callable, error) {
 	if len(c.Content.Content) == 0 {
 		return nil, fmt.Errorf("blank call")
 	}
@@ -44,7 +44,7 @@ func (c *Call) ee(env *Env, _ int) (Callable, error) {
 		return ee, nil
 	}
 }
-func (c *Call) Eval(env *Env, order int) (evaler Evaler, err error) {
+func (c *Call) Eval(env IEnv) (evaler Evaler, err error) {
 	//env.printf("call init\t%s %s", c.Pos, c.Inspect())
 	c2 := c
 	defer func() {
@@ -58,7 +58,7 @@ func (c *Call) Eval(env *Env, order int) (evaler Evaler, err error) {
 	if len(c.Content.Content) == 0 {
 		return nil, fmt.Errorf("%s: blank call", c.Pos)
 	}
-	ee, err := c.ee(env, order)
+	ee, err := c.ee(env)
 	if err != nil {
 		return nil, err
 	}
@@ -82,24 +82,24 @@ func (c *Call) Eval(env *Env, order int) (evaler Evaler, err error) {
 		C:       c.C,
 	}
 
-	if env.debug {
-		env.printf("call args\t%s %s", c.Pos, c2.Inspect())
-		env.printf("%#v", ee.Info(env).Resources)
+	if env.Debug2() {
+		env.Printf("call args\t%s %s", c.Pos, c2.Inspect())
+		env.Printf("%#v", ee.Info(env).Resources)
 	}
 
 	resources, stringsArgs := util.EvalResources(ee.Info(env).Resources, StringsSliceEvalers(args))
 	rs := util.EvalResources2(ee.Info(env).Resources, StringsSliceEvalers(args))
-	if !env.checkResources(rs) {
-		brs := env.badResources(rs)
+	if !env.CheckResources(rs) {
+		brs := env.BadResources(rs)
 		brsString := make([]string, len(brs))
 		for _, i := range brs {
 			brsString = append(brsString, rs[i].String())
 		}
-		env.printf("deferred evaluating %s due to usage of %d resource(s):%s", c.Pos, len(rs), strings.Join(brsString, " "))
+		env.Printf("deferred evaluating %s due to usage of %d resource(s):%s", c.Pos, len(rs), strings.Join(brsString, " "))
 		return c2, nil
 	}
-	env.lockResources(c.Pos, resources, stringsArgs)
-	defer env.unlockResources(c.Pos, resources, stringsArgs)
+	env.LockResources(c.Pos, resources, stringsArgs)
+	defer env.UnlockResources(c.Pos, resources, stringsArgs)
 	result, err := ee.Call(env, args)
 	if err != nil {
 		return
