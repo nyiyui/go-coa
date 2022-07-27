@@ -12,7 +12,7 @@ import (
 
 type result struct {
 	name   string
-	pageid float64
+	pageid int
 }
 
 func search(name, baseURL string) (results []result, err error) {

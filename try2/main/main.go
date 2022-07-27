@@ -3,11 +3,12 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"log"
+	"time"
+
 	"github.com/alecthomas/participle/v2"
 	"github.com/alecthomas/participle/v2/lexer"
 	"gitlab.com/coalang/go-coa/try2/parser"
-	"log"
-	"time"
 )
 
 //go:embed main.coa
@@ -26,7 +27,7 @@ func _main() error {
 	env := parser.NewEnv(lexer.Position{Filename: filename}, true)
 
 	start := time.Now()
-	_, err = root.Eval(env, 0)
+	_, err = root.Eval(env)
 	end := time.Now()
 	if err != nil {
 		return fmt.Errorf("error return trace (most recent call last):\n%w", err)
