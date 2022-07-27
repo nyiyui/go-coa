@@ -1,0 +1,5 @@
+(@def f {
+	(@add 1 2)
+})
+(@io_outln f)
+(@map (@range 100) f)

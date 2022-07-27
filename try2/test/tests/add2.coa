@@ -1,0 +1,3 @@
+(@def add_1 {(@add 1 $0)})
+(@def three (add_1 2))
+(@assert (@eq three 3) "three")
